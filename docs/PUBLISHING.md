@@ -118,57 +118,7 @@ $env:VITE_CONTENT_URLS = "https://<пользователь>.github.io/<репо
 npm --prefix apps/ui run build
 ```
 
-Шаблон `.github/workflows/pages.yml` для репозитория кода.
-
-> Шаблон не запускался. Адреса репозиториев подставьте свои, версии действий сверьте с актуальными.
-
-```yaml
-name: Publish app
-
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 26
-          cache: npm
-
-      - run: npm ci
-
-      - name: Build the app without embedded content
-        run: npm --prefix apps/ui run build
-        env:
-          EXAM_CONTENT_DIR: none
-          # Адрес сайта с банками (без завершающего слэша). Подставьте свой.
-          VITE_CONTENT_URLS: https://<пользователь>.github.io/<репозиторий-банков>
-
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: apps/ui/dist
-      - id: deployment
-        uses: actions/deploy-pages@v4
-```
+В этом репозитории это делает [`.github/workflows/pages.yml`](../.github/workflows/pages.yml). При каждом push в `main` он проверяет типы и тесты, собирает страницу с `EXAM_CONTENT_DIR=none` и публикует её; правки только в документации сборку не запускают. Адрес банков workflow берёт из `content-sources.json`, поэтому в форке достаточно поменять этот файл. В настройках репозитория (Settings, Pages) источником должен стоять «GitHub Actions».
 
 Приложение будет доступно по адресу `https://<пользователь>.github.io/<репозиторий-кода>/`.
 

@@ -118,57 +118,7 @@ $env:VITE_CONTENT_URLS = "https://<пайдаланушы>.github.io/<банкт
 npm --prefix apps/ui run build
 ```
 
-Код репозиторийіне арналған `.github/workflows/pages.yml` үлгісі.
-
-> Үлгі іске қосылып көрілмеген. Репозиторий мекенжайларын өзіңіздікімен ауыстырыңыз, әрекеттердің нұсқаларын ағымдағыларымен салыстырып тексеріңіз.
-
-```yaml
-name: Publish app
-
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 26
-          cache: npm
-
-      - run: npm ci
-
-      - name: Build the app without embedded content
-        run: npm --prefix apps/ui run build
-        env:
-          EXAM_CONTENT_DIR: none
-          # Банктер сайтының мекенжайы (соңында слэшсіз). Өзіңіздікін қойыңыз.
-          VITE_CONTENT_URLS: https://<пайдаланушы>.github.io/<банктер-репозиторийі>
-
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: apps/ui/dist
-      - id: deployment
-        uses: actions/deploy-pages@v4
-```
+Бұл репозиторийде мұны [`.github/workflows/pages.yml`](../.github/workflows/pages.yml) істейді. Ол `main` тармағына әр push кезінде типтер мен тесттерді тексереді, бетті `EXAM_CONTENT_DIR=none` арқылы құрастырады және жариялайды; тек құжаттамадағы өзгерістер құрастыруды іске қоспайды. Банктер мекенжайын workflow `content-sources.json` файлынан алады, сондықтан форкта осы файлды өзгерту жеткілікті. Репозиторий баптауларында (Settings, Pages) дереккөз ретінде «GitHub Actions» таңдалуы керек.
 
 Қолданба `https://<пайдаланушы>.github.io/<код-репозиторийі>/` мекенжайында қолжетімді болады.
 

@@ -15,6 +15,8 @@
   &nbsp;·&nbsp;
   <a href="https://github.com/SSSox/exam-platform/releases/latest/download/exam-trainer-android.apk"><b>Android үшін жүктеу</b></a>
   &nbsp;·&nbsp;
+  <a href="https://sssox.github.io/exam-platform/"><b>Веб-нұсқа</b></a>
+  &nbsp;·&nbsp;
   <a href="https://github.com/SSSox/exam-platform/releases">Барлық нұсқалар</a>
 </p>
 
@@ -46,6 +48,8 @@
 Скриншоттар `examples/demo-content` демо-банктерінде түсірілген. Демо-банктерде қазақша аударма жоқ, сондықтан сұрақтар мен атаулар ағылшын немесе орыс тілінде көрсетіледі.
 
 ## Орнату
+
+Қолданбаны орнатпай-ақ браузерде ашуға болады: [веб-нұсқа](https://sssox.github.io/exam-platform/). Жауаптар мен үлгерім сол браузерде сақталады.
 
 Windows 10 және 11, 64 биттік. [Орнатқышты](https://github.com/SSSox/exam-platform/releases/latest/download/exam-trainer-windows-setup.exe) жүктеп, іске қосыңыз. Орнатқышта әзірге жариялаушының қолтаңбасы жоқ, сондықтан SmartScreen «Система Windows защитила ваш компьютер» (Windows protected your PC) терезесін көрсетуі мүмкін. Жалғастыру үшін «Подробнее» (More info), содан кейін «Выполнить в любом случае» (Run anyway) түймесін басыңыз. Қолтаңбаның неге әлі жоқ екені [Кодқа қол қою саясаты](#кодқа-қол-қою-саясаты-code-signing-policy) бөлімінде жазылған.
 
@@ -228,6 +232,7 @@ apps/
 examples/
   demo-content/       бейтарап демо банктер репозиторийі
 .github/workflows/
+  pages.yml           веб-нұсқаны GitHub Pages-ке жариялау
   release.yml         GitHub Actions ішінде Windows орнатқышын құрастыру және оған қол қою
 .signpath/            SignPath қол қою баптаулары
 docs/

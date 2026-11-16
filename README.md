@@ -15,6 +15,8 @@
   &nbsp;·&nbsp;
   <a href="https://github.com/SSSox/exam-platform/releases/latest/download/exam-trainer-android.apk"><b>Скачать для Android</b></a>
   &nbsp;·&nbsp;
+  <a href="https://sssox.github.io/exam-platform/"><b>Веб-версия</b></a>
+  &nbsp;·&nbsp;
   <a href="https://github.com/SSSox/exam-platform/releases">Все версии</a>
 </p>
 
@@ -46,6 +48,8 @@
 Скриншоты сняты на демо-банках из `examples/demo-content`. Пояснения к демо-вопросам есть только на английском.
 
 ## Установка
+
+Без установки приложение открывается в браузере: [веб-версия](https://sssox.github.io/exam-platform/). Ответы и прогресс она хранит в этом браузере.
 
 Windows 10 и 11 (64-разрядные). Скачайте [установщик](https://github.com/SSSox/exam-platform/releases/latest/download/exam-trainer-windows-setup.exe) и запустите его. Пока у установщика нет подписи издателя, SmartScreen может показать окно «Система Windows защитила ваш компьютер». Чтобы продолжить, нажмите «Подробнее», затем «Выполнить в любом случае». Почему подписи пока нет, написано в разделе [Политика подписи кода](#политика-подписи-кода-code-signing-policy).
 
@@ -228,6 +232,7 @@ apps/
 examples/
   demo-content/       нейтральный демо-репозиторий банков
 .github/workflows/
+  pages.yml           публикация веб-версии на GitHub Pages
   release.yml         сборка и подпись установщика Windows в GitHub Actions
 .signpath/            настройки подписи для SignPath
 docs/

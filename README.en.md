@@ -15,6 +15,8 @@
   &nbsp;·&nbsp;
   <a href="https://github.com/SSSox/exam-platform/releases/latest/download/exam-trainer-android.apk"><b>Download for Android</b></a>
   &nbsp;·&nbsp;
+  <a href="https://sssox.github.io/exam-platform/"><b>Web version</b></a>
+  &nbsp;·&nbsp;
   <a href="https://github.com/SSSox/exam-platform/releases">All versions</a>
 </p>
 
@@ -46,6 +48,8 @@ The phone gets the same screens. Frequent buttons sit in the bottom bar, within 
 The screenshots use the demo banks from `examples/demo-content`.
 
 ## Installation
+
+Without installing anything, the app opens in the browser: [web version](https://sssox.github.io/exam-platform/). It keeps answers and progress in that browser.
 
 Windows 10 and 11, 64-bit. Download the [installer](https://github.com/SSSox/exam-platform/releases/latest/download/exam-trainer-windows-setup.exe) and run it. Until the installer carries a publisher signature, SmartScreen may show a "Windows protected your PC" window. To go on, click "More info", then "Run anyway". The [Code signing policy](#code-signing-policy) section explains why there is no signature yet.
 
@@ -228,6 +232,7 @@ apps/
 examples/
   demo-content/       neutral demo bank repository
 .github/workflows/
+  pages.yml           publish the web version to GitHub Pages
   release.yml         build and sign the Windows installer in GitHub Actions
 .signpath/            signing settings for SignPath
 docs/

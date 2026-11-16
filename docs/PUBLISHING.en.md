@@ -118,57 +118,7 @@ $env:VITE_CONTENT_URLS = "https://<user>.github.io/<banks-repo>"
 npm --prefix apps/ui run build
 ```
 
-Template `.github/workflows/pages.yml` for the code repository.
-
-> The template has not been run. Substitute your own repository addresses and check the action versions against the current ones.
-
-```yaml
-name: Publish app
-
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 26
-          cache: npm
-
-      - run: npm ci
-
-      - name: Build the app without embedded content
-        run: npm --prefix apps/ui run build
-        env:
-          EXAM_CONTENT_DIR: none
-          # The address of the banks site (without a trailing slash). Substitute your own.
-          VITE_CONTENT_URLS: https://<user>.github.io/<banks-repo>
-
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: apps/ui/dist
-      - id: deployment
-        uses: actions/deploy-pages@v4
-```
+In this repository [`.github/workflows/pages.yml`](../.github/workflows/pages.yml) does it. On every push to `main` it runs the type check and the tests, builds the page with `EXAM_CONTENT_DIR=none` and publishes it; changes to documentation alone do not start it. The workflow takes the bank address from `content-sources.json`, so a fork only has to change that file. In the repository settings (Settings, Pages) the source must be "GitHub Actions".
 
 The app will be available at `https://<user>.github.io/<code-repo>/`.
 
