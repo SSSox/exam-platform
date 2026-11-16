@@ -49,7 +49,7 @@ The screenshots use the demo banks from `examples/demo-content`.
 
 ## Installation
 
-The app also opens in the browser, with nothing to install: [web version](https://sssox.github.io/exam-platform/). It keeps answers and progress in that browser.
+The app opens in the browser, with nothing to install: [web version](https://sssox.github.io/exam-platform/). It keeps answers and progress in that browser.
 
 Windows 10 and 11, 64-bit. Download the [installer](https://github.com/SSSox/exam-platform/releases/latest/download/exam-trainer-windows-setup.exe) and run it. Until the installer carries a publisher signature, SmartScreen may show a "Windows protected your PC" window. To go on, click "More info", then "Run anyway". The [Code signing policy](#code-signing-policy) section explains why there is no signature yet.
 
