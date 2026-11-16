@@ -1,12 +1,57 @@
 [Қазақша](README.kk.md) · [Русский](README.md) · [English](README.en.md)
 
-# Exam Trainer
+<p align="center">
+  <img src="apps/desktop/src-tauri/icons/128x128.png" width="88" height="88" alt="">
+</p>
+
+<h1 align="center">Exam Trainer</h1>
+
+<p align="center">
+  Exam preparation with test question banks: practice with an explanation after every answer, mistake review and a timed mock exam.
+</p>
+
+<p align="center">
+  <a href="https://github.com/SSSox/exam-platform/releases/latest/download/exam-trainer-windows-setup.exe"><b>Download for Windows</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/SSSox/exam-platform/releases/latest/download/exam-trainer-android.apk"><b>Download for Android</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/SSSox/exam-platform/releases">All versions</a>
+</p>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/en/bank-dark.webp">
+  <img src="docs/screenshots/en/bank-light.webp" alt="Subject page: the question map by topic, the mastery percentage and the practice setup">
+</picture>
 
 An app for preparing for exams with test question banks. A student picks a semester, opens a subject and practises: answers questions, sees the explanation straight away, and returns to the mistakes. Before the exam there is a mock test with a timer.
 
 The code is not tied to any university or subject. The tree of sections and the questions live in plain JSON files in a separate bank repository. To add a subject or a whole university, you change the data. The address of the bank repository is set in `content-sources.json`: the app fetches the banks from it over the network, so editing the banks does not require rebuilding the app. The built-in snapshot stays as a fallback source. There are Windows and Android versions (Tauri) and a web version (a static build that suits GitHub Pages).
 
 This is the code repository. It contains no real banks, only a small demo set in `examples/demo-content`.
+
+## Screenshots
+
+Right after an answer the app shows the review: what you picked, the correct answer and the explanation from the bank.
+
+<img src="docs/screenshots/en/answer.webp" alt="Answer review: the picked option is marked wrong and the correct one is highlighted">
+
+The phone gets the same screens. Frequent buttons sit in the bottom bar, within reach of the thumb. On the right is the dark theme.
+
+<p align="center">
+  <img src="docs/screenshots/en/phone-bank.webp" width="280" alt="The question map on a phone">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/en/phone-answer.webp" width="280" alt="Answer review on a phone in the dark theme">
+</p>
+
+The screenshots use the demo banks from `examples/demo-content`.
+
+## Installation
+
+Windows 10 and 11, 64-bit. Download the [installer](https://github.com/SSSox/exam-platform/releases/latest/download/exam-trainer-windows-setup.exe) and run it. Until the installer carries a publisher signature, SmartScreen may show a "Windows protected your PC" window. To go on, click "More info", then "Run anyway". The [Code signing policy](#code-signing-policy) section explains why there is no signature yet.
+
+Android 7.0 or newer, on a phone with a 64-bit processor (ARM64). Download the [APK](https://github.com/SSSox/exam-platform/releases/latest/download/exam-trainer-android.apk) on the phone and open it. Android asks to allow installing apps from unknown sources: on Android 8 and newer the permission goes to the browser or file manager that opened the file. Allow it and go back to the installation.
+
+Both versions check once a day whether a new version is out. The "Update" button in the settings downloads it, and answers and progress stay. On Android 8 and newer, the app asks for permission to install updates before the first one.
 
 ## What the app does
 
@@ -188,6 +233,7 @@ examples/
 docs/
   FORMAT.md           the exambank/2 format and folder layout
   PUBLISHING.md       publishing to GitHub Pages and making releases
+  screenshots/        README screenshots, taken on the demo banks
 content-sources.json  addresses of the bank site
 downloads.json        installer links of the web version
 ```
