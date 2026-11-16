@@ -51,7 +51,7 @@ Windows 10 and 11, 64-bit. Download the [installer](https://github.com/SSSox/exa
 
 Android 7.0 or newer, on a phone with a 64-bit processor (ARM64). Download the [APK](https://github.com/SSSox/exam-platform/releases/latest/download/exam-trainer-android.apk) on the phone and open it. Android asks to allow installing apps from unknown sources: on Android 8 and newer the permission goes to the browser or file manager that opened the file. Allow it and go back to the installation.
 
-Both versions check once a day whether a new version is out. The "Update" button in the settings downloads it, and answers and progress stay. On Android 8 and newer, the app asks for permission to install updates before the first one.
+Both apps check once a day for a new version. The "Update" button in the settings downloads it, and answers and progress stay. On Android 8 and newer, the app asks for permission to install updates before the first one.
 
 ## What the app does
 
