@@ -1,0 +1,23 @@
+{
+  "format": "exambank/2",
+  "id": "demo/physics",
+  "subject": "Physics",
+  "language": "en",
+  "license": "CC0-1.0",
+  "authors": [
+    "Demo Authors"
+  ],
+  "scoring": {
+    "multiple_choice": "exact"
+  },
+  "topics": [
+    {
+      "id": 1,
+      "name": "Motion and forces"
+    },
+    {
+      "id": 2,
+      "name": "Energy"
+    }
+  ]
+}

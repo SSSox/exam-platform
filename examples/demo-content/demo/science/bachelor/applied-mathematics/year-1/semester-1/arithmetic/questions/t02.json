@@ -1,0 +1,63 @@
+{
+  "format": "exambank/2",
+  "bank": "demo/arithmetic",
+  "questions": [
+    {
+      "id": 4,
+      "topic_id": 2,
+      "type": "numeric",
+      "question": "What is the square root of 50, rounded to one decimal place?",
+      "answer": {
+        "value": 7.1,
+        "tolerance": 0.05,
+        "unit": null
+      },
+      "explanation": "7.1 x 7.1 = 50.41, while 7.0 x 7.0 = 49, so the root is about 7.07."
+    },
+    {
+      "id": 6,
+      "topic_id": 2,
+      "type": "single_choice",
+      "question": "A triangle with all three sides equal is called...",
+      "options": [
+        {
+          "id": "A",
+          "text": "Scalene"
+        },
+        {
+          "id": "B",
+          "text": "Isosceles"
+        },
+        {
+          "id": "C",
+          "text": "Equilateral"
+        },
+        {
+          "id": "D",
+          "text": "Right-angled"
+        },
+        {
+          "id": "E",
+          "text": "Obtuse"
+        }
+      ],
+      "correct_answers": [
+        "C"
+      ],
+      "free_input": {
+        "answers": [
+          {
+            "for": "C",
+            "accept": {
+              "en": [
+                "equilateral",
+                "equilateral triangle"
+              ]
+            }
+          }
+        ]
+      },
+      "explanation": "Equilateral comes from the Latin words for equal sides."
+    }
+  ]
+}

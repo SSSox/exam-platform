@@ -1,0 +1,23 @@
+{
+  "format": "exambank/2",
+  "id": "demo/astronomy",
+  "subject": "Astronomy",
+  "language": "en",
+  "license": "CC0-1.0",
+  "authors": [
+    "Demo Authors"
+  ],
+  "scoring": {
+    "multiple_choice": "exact"
+  },
+  "topics": [
+    {
+      "id": 1,
+      "name": "The Solar System"
+    },
+    {
+      "id": 2,
+      "name": "Stars and galaxies"
+    }
+  ]
+}

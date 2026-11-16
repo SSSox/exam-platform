@@ -1,0 +1,9 @@
+{
+  "bank": "demo/geography",
+  "locale": "ru",
+  "subject": "География",
+  "difficulty_scale": {
+    "1": "Знание",
+    "2": "Понимание"
+  }
+}

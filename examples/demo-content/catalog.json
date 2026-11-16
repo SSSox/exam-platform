@@ -1,0 +1,55 @@
+{
+  "format": "exambank/2",
+  "kinds": {
+    "university": {
+      "title": {
+        "ru": "Университет",
+        "kk": "Университет",
+        "en": "University"
+      }
+    },
+    "faculty": {
+      "title": {
+        "ru": "Факультет",
+        "kk": "Факультет",
+        "en": "Faculty"
+      }
+    },
+    "degree": {
+      "title": {
+        "ru": "Степень",
+        "kk": "Дәреже",
+        "en": "Degree"
+      }
+    },
+    "specialty": {
+      "title": {
+        "ru": "Специальность",
+        "kk": "Мамандық",
+        "en": "Specialty"
+      }
+    },
+    "year": {
+      "title": {
+        "ru": "Курс",
+        "kk": "Курс",
+        "en": "Year"
+      }
+    },
+    "semester": {
+      "title": {
+        "ru": "Семестр",
+        "kk": "Семестр",
+        "en": "Semester"
+      },
+      "place": true
+    },
+    "subject": {
+      "title": {
+        "ru": "Предмет",
+        "kk": "Пән",
+        "en": "Subject"
+      }
+    }
+  }
+}

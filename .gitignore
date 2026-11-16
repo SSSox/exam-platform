@@ -1,0 +1,86 @@
+# Dependencies and build output
+node_modules/
+dist/
+build/
+out/
+coverage/
+.cache/
+.vite/
+*.tsbuildinfo
+apps/ui/public/content/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/schemas/
+
+# Built installers and packages (they go to GitHub Releases, not into the repository)
+/release/
+apps/desktop/src-tauri/gen/android/app/release/
+*.apk
+*.aab
+*.exe
+*.msi
+
+# Logs and temporary files
+*.log
+npm-debug.log*
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+# Android release key and its settings (see keystore.properties.example)
+*.jks
+*.keystore
+*.p12
+*.pfx
+# Private key of the app updater (tauri signer generate); only the public key goes into tauri.conf.json
+*.key
+keystore.properties
+key.properties
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors and IDEs
+.vscode/
+.idea/
+.vs/
+*.sublime-project
+*.sublime-workspace
+
+# Local tool settings and working notes, not part of the project
+.claude/
+.cursor/
+.cursorrules
+.windsurf/
+.windsurfrules
+.codex/
+.gemini/
+.continue/
+.serena/
+.kiro/
+.roo/
+.clinerules
+.aider*
+.agents/
+.opencode/
+.trae/
+.junie/
+.playwright-mcp/
+.impeccable/
+.github/copilot-instructions.md
+.mcp.json
+skills-lock.json
+graphify-out/
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+GEMINI.md
+/DESIGN.md
+/PRODUCT.md

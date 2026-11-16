@@ -1,0 +1,9 @@
+{
+  "name": "@exam/content-tools",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@exam/core": "*", "@exam/schema": "*", "zod": "^4.0.0" }
+}

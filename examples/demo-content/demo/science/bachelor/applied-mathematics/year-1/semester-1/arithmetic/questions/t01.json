@@ -1,0 +1,124 @@
+{
+  "format": "exambank/2",
+  "bank": "demo/arithmetic",
+  "questions": [
+    {
+      "id": 1,
+      "topic_id": 1,
+      "type": "single_choice",
+      "question": "Which fraction is equal to 0.75?",
+      "options": [
+        {
+          "id": "A",
+          "text": "1/2"
+        },
+        {
+          "id": "B",
+          "text": "2/3"
+        },
+        {
+          "id": "C",
+          "text": "3/4"
+        },
+        {
+          "id": "D",
+          "text": "4/5"
+        },
+        {
+          "id": "E",
+          "text": "5/6"
+        }
+      ],
+      "correct_answers": [
+        "C"
+      ],
+      "explanation": "0.75 = 75/100, and dividing both parts by 25 gives 3/4."
+    },
+    {
+      "id": 2,
+      "topic_id": 1,
+      "type": "multiple_choice",
+      "question": "Which of these numbers are prime?",
+      "options": [
+        {
+          "id": "A",
+          "text": "2"
+        },
+        {
+          "id": "B",
+          "text": "9"
+        },
+        {
+          "id": "C",
+          "text": "11"
+        },
+        {
+          "id": "D",
+          "text": "15"
+        },
+        {
+          "id": "E",
+          "text": "21"
+        }
+      ],
+      "correct_answers": [
+        "A",
+        "C"
+      ],
+      "explanation": "A prime number has exactly two divisors: 1 and itself. 9 = 3 x 3, 15 = 3 x 5 and 21 = 3 x 7."
+    },
+    {
+      "id": 3,
+      "topic_id": 1,
+      "type": "numeric",
+      "question": "What is 15% of 200?",
+      "answer": {
+        "value": 30,
+        "tolerance": 0,
+        "unit": null
+      },
+      "explanation": "15% of 200 = 0.15 x 200 = 30."
+    },
+    {
+      "id": 5,
+      "topic_id": 1,
+      "type": "short_text",
+      "question": "What is the result of a multiplication called?",
+      "answers": [
+        {
+          "accept": {
+            "en": [
+              "product",
+              "the product"
+            ]
+          }
+        }
+      ],
+      "reject": {
+        "en": [
+          "factor",
+          "sum"
+        ]
+      },
+      "typos": "off",
+      "explanation": "In 6 x 7 = 42 the numbers 6 and 7 are factors and 42 is the product."
+    },
+    {
+      "id": 7,
+      "topic_id": 1,
+      "type": "open",
+      "question": "Explain why the sum of two odd numbers is always even.",
+      "model_answer": "Write the odd numbers as 2a + 1 and 2b + 1. Their sum is 2a + 2b + 2 = 2(a + b + 1), which has the factor 2, so it is even.",
+      "rubric": [
+        {
+          "points": 1,
+          "criterion": "Writes odd numbers in the form 2k + 1"
+        },
+        {
+          "points": 1,
+          "criterion": "Shows that the sum has the factor 2"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "format": "exambank/2",
+  "id": "demo/geography",
+  "subject": {
+    "en": "Geography",
+    "ru": "География"
+  },
+  "language": "en",
+  "license": "CC0-1.0",
+  "authors": [
+    "Demo Authors"
+  ],
+  "difficulty_scale": [
+    {
+      "level": 1,
+      "title": {
+        "en": "Recall",
+        "ru": "Знание"
+      }
+    },
+    {
+      "level": 2,
+      "title": {
+        "en": "Understanding",
+        "ru": "Понимание"
+      }
+    }
+  ],
+  "scoring": {
+    "multiple_choice": "exact"
+  },
+  "topics": [
+    {
+      "id": 1,
+      "name": {
+        "en": "Continents and oceans",
+        "ru": "Континенты и океаны"
+      }
+    },
+    {
+      "id": 2,
+      "name": {
+        "en": "Rivers and mountains",
+        "ru": "Реки и горы"
+      }
+    },
+    {
+      "id": 3,
+      "name": {
+        "en": "Countries and capitals",
+        "ru": "Страны и столицы"
+      }
+    }
+  ],
+  "translations": {
+    "ru": "machine"
+  }
+}

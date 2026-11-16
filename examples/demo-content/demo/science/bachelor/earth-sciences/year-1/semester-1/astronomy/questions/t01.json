@@ -1,0 +1,117 @@
+{
+  "format": "exambank/2",
+  "bank": "demo/astronomy",
+  "questions": [
+    {
+      "id": 1,
+      "topic_id": 1,
+      "type": "single_choice",
+      "question": "Which planet is closest to the Sun?",
+      "options": [
+        {
+          "id": "A",
+          "text": "Venus"
+        },
+        {
+          "id": "B",
+          "text": "Earth"
+        },
+        {
+          "id": "C",
+          "text": "Mercury"
+        },
+        {
+          "id": "D",
+          "text": "Mars"
+        },
+        {
+          "id": "E",
+          "text": "Jupiter"
+        }
+      ],
+      "correct_answers": [
+        "C"
+      ],
+      "free_input": {
+        "answers": [
+          {
+            "for": "C",
+            "accept": {
+              "en": [
+                "Mercury"
+              ]
+            }
+          }
+        ]
+      },
+      "explanation": "Mercury orbits the Sun at an average distance of about 58 million km."
+    },
+    {
+      "id": 3,
+      "topic_id": 1,
+      "type": "multiple_choice",
+      "question": "Which of these planets are gas giants?",
+      "options": [
+        {
+          "id": "A",
+          "text": "Jupiter"
+        },
+        {
+          "id": "B",
+          "text": "Mars"
+        },
+        {
+          "id": "C",
+          "text": "Saturn"
+        },
+        {
+          "id": "D",
+          "text": "Mercury"
+        },
+        {
+          "id": "E",
+          "text": "Venus"
+        }
+      ],
+      "correct_answers": [
+        "A",
+        "C"
+      ],
+      "explanation": "The other three are small rocky planets."
+    },
+    {
+      "id": 4,
+      "topic_id": 1,
+      "type": "numeric",
+      "question": "How many planets are there in the Solar System?",
+      "answer": {
+        "value": 8,
+        "tolerance": 0,
+        "unit": null
+      },
+      "explanation": "Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus and Neptune."
+    },
+    {
+      "id": 5,
+      "topic_id": 1,
+      "type": "short_text",
+      "question": "What is the natural satellite of the Earth called?",
+      "answers": [
+        {
+          "accept": {
+            "en": [
+              "Moon",
+              "the Moon"
+            ]
+          }
+        }
+      ],
+      "reject": {
+        "en": [
+          "Sun"
+        ]
+      },
+      "explanation": "The Moon orbits the Earth about once every 27 days."
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "kind": "subject",
+  "title": {
+    "en": "Natural sciences",
+    "ru": "Естественные науки"
+  },
+  "order": 10,
+  "items": [
+    "physics",
+    "chemistry"
+  ]
+}

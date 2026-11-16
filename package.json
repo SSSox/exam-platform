@@ -1,0 +1,17 @@
+{
+  "name": "exam-platform",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "test": "vitest run",
+    "content": "node packages/content-tools/src/cli.ts",
+    "release": "node apps/desktop/scripts/release.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

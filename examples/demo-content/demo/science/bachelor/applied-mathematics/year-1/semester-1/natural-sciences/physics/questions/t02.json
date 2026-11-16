@@ -1,0 +1,107 @@
+{
+  "format": "exambank/2",
+  "bank": "demo/physics",
+  "questions": [
+    {
+      "id": 3,
+      "topic_id": 2,
+      "type": "multiple_choice",
+      "question": "Which of these are forms of energy?",
+      "options": [
+        {
+          "id": "A",
+          "text": "Kinetic"
+        },
+        {
+          "id": "B",
+          "text": "Potential"
+        },
+        {
+          "id": "C",
+          "text": "Velocity"
+        },
+        {
+          "id": "D",
+          "text": "Thermal"
+        },
+        {
+          "id": "E",
+          "text": "Momentum"
+        }
+      ],
+      "correct_answers": [
+        "A",
+        "B",
+        "D"
+      ],
+      "explanation": "Velocity and momentum are motion quantities, not forms of energy."
+    },
+    {
+      "id": 5,
+      "topic_id": 2,
+      "type": "short_text",
+      "question": "What is the energy of a moving object called?",
+      "answers": [
+        {
+          "accept": {
+            "en": [
+              "kinetic energy",
+              "kinetic"
+            ]
+          }
+        }
+      ],
+      "reject": {
+        "en": [
+          "potential energy"
+        ]
+      },
+      "explanation": "Kinetic energy equals half the mass times the square of the speed."
+    },
+    {
+      "id": 6,
+      "topic_id": 2,
+      "type": "single_choice",
+      "question": "Light travels fastest through which medium?",
+      "options": [
+        {
+          "id": "A",
+          "text": "Water"
+        },
+        {
+          "id": "B",
+          "text": "Glass"
+        },
+        {
+          "id": "C",
+          "text": "Vacuum"
+        },
+        {
+          "id": "D",
+          "text": "Air"
+        },
+        {
+          "id": "E",
+          "text": "Diamond"
+        }
+      ],
+      "correct_answers": [
+        "C"
+      ],
+      "free_input": {
+        "answers": [
+          {
+            "for": "C",
+            "accept": {
+              "en": [
+                "vacuum",
+                "a vacuum"
+              ]
+            }
+          }
+        ]
+      },
+      "explanation": "Light slows down in any material; in a vacuum it moves at about 300,000 km/s."
+    }
+  ]
+}

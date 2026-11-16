@@ -1,0 +1,104 @@
+{
+  "format": "exambank/2",
+  "bank": "demo/chemistry",
+  "questions": [
+    {
+      "id": 3,
+      "topic_id": 2,
+      "type": "single_choice",
+      "question": "What is the pH of a neutral solution at 25 degrees Celsius?",
+      "options": [
+        {
+          "id": "A",
+          "text": "0"
+        },
+        {
+          "id": "B",
+          "text": "5"
+        },
+        {
+          "id": "C",
+          "text": "7"
+        },
+        {
+          "id": "D",
+          "text": "10"
+        },
+        {
+          "id": "E",
+          "text": "14"
+        }
+      ],
+      "correct_answers": [
+        "C"
+      ],
+      "explanation": "Below 7 a solution is acidic, above 7 it is basic."
+    },
+    {
+      "id": 5,
+      "topic_id": 2,
+      "type": "short_text",
+      "question": "What is the chemical formula of water?",
+      "answers": [
+        {
+          "accept": {
+            "en": [
+              "H2O"
+            ]
+          }
+        }
+      ],
+      "reject": {
+        "en": [
+          "H2O2"
+        ]
+      },
+      "explanation": "H2O2 is hydrogen peroxide, a different compound."
+    },
+    {
+      "id": 6,
+      "topic_id": 2,
+      "type": "single_choice",
+      "question": "Which gas do plants absorb during photosynthesis?",
+      "options": [
+        {
+          "id": "A",
+          "text": "Oxygen"
+        },
+        {
+          "id": "B",
+          "text": "Nitrogen"
+        },
+        {
+          "id": "C",
+          "text": "Carbon dioxide"
+        },
+        {
+          "id": "D",
+          "text": "Hydrogen"
+        },
+        {
+          "id": "E",
+          "text": "Helium"
+        }
+      ],
+      "correct_answers": [
+        "C"
+      ],
+      "free_input": {
+        "answers": [
+          {
+            "for": "C",
+            "accept": {
+              "en": [
+                "carbon dioxide",
+                "CO2"
+              ]
+            }
+          }
+        ]
+      },
+      "explanation": "Plants turn carbon dioxide and water into sugar and release oxygen."
+    }
+  ]
+}

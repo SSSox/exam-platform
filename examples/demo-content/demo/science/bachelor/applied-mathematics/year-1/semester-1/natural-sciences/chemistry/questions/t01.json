@@ -1,0 +1,96 @@
+{
+  "format": "exambank/2",
+  "bank": "demo/chemistry",
+  "questions": [
+    {
+      "id": 1,
+      "topic_id": 1,
+      "type": "single_choice",
+      "question": "Which element has the atomic number 1?",
+      "options": [
+        {
+          "id": "A",
+          "text": "Helium"
+        },
+        {
+          "id": "B",
+          "text": "Oxygen"
+        },
+        {
+          "id": "C",
+          "text": "Hydrogen"
+        },
+        {
+          "id": "D",
+          "text": "Carbon"
+        },
+        {
+          "id": "E",
+          "text": "Nitrogen"
+        }
+      ],
+      "correct_answers": [
+        "C"
+      ],
+      "free_input": {
+        "answers": [
+          {
+            "for": "C",
+            "accept": {
+              "en": [
+                "hydrogen"
+              ]
+            }
+          }
+        ]
+      },
+      "explanation": "Hydrogen has a single proton in its nucleus."
+    },
+    {
+      "id": 2,
+      "topic_id": 1,
+      "type": "multiple_choice",
+      "question": "Which of these are noble gases?",
+      "options": [
+        {
+          "id": "A",
+          "text": "Helium"
+        },
+        {
+          "id": "B",
+          "text": "Neon"
+        },
+        {
+          "id": "C",
+          "text": "Oxygen"
+        },
+        {
+          "id": "D",
+          "text": "Argon"
+        },
+        {
+          "id": "E",
+          "text": "Nitrogen"
+        }
+      ],
+      "correct_answers": [
+        "A",
+        "B",
+        "D"
+      ],
+      "explanation": "Noble gases sit in the last column of the periodic table and barely react."
+    },
+    {
+      "id": 4,
+      "topic_id": 1,
+      "type": "numeric",
+      "question": "How many protons does a carbon atom have?",
+      "answer": {
+        "value": 6,
+        "tolerance": 0,
+        "unit": null
+      },
+      "explanation": "The atomic number of carbon is 6."
+    }
+  ]
+}

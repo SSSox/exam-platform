@@ -1,0 +1,135 @@
+{
+  "format": "exambank/2",
+  "bank": "demo/geography",
+  "questions": [
+    {
+      "id": 3,
+      "topic_id": 2,
+      "difficulty_level": 1,
+      "type": "single_choice",
+      "question": {
+        "en": "The longest mountain range on land is the...",
+        "ru": "Самая длинная горная система на суше называется..."
+      },
+      "options": [
+        {
+          "id": "A",
+          "text": {
+            "en": "Alps",
+            "ru": "Альпы"
+          }
+        },
+        {
+          "id": "B",
+          "text": {
+            "en": "Andes",
+            "ru": "Анды"
+          }
+        },
+        {
+          "id": "C",
+          "text": {
+            "en": "Himalayas",
+            "ru": "Гималаи"
+          }
+        },
+        {
+          "id": "D",
+          "text": {
+            "en": "Rocky Mountains",
+            "ru": "Скалистые горы"
+          }
+        },
+        {
+          "id": "E",
+          "text": {
+            "en": "Urals",
+            "ru": "Уральские горы"
+          }
+        }
+      ],
+      "correct_answers": [
+        "B"
+      ],
+      "explanation": "The Andes stretch for about 7,000 km along the west coast of South America."
+    },
+    {
+      "id": 4,
+      "topic_id": 2,
+      "difficulty_level": 1,
+      "type": "single_choice",
+      "question": {
+        "en": "Which river flows through Cairo?",
+        "ru": "Какая река протекает через Каир?"
+      },
+      "options": [
+        {
+          "id": "A",
+          "text": {
+            "en": "Congo",
+            "ru": "Конго"
+          }
+        },
+        {
+          "id": "B",
+          "text": {
+            "en": "Niger",
+            "ru": "Нигер"
+          }
+        },
+        {
+          "id": "C",
+          "text": {
+            "en": "Nile",
+            "ru": "Нил"
+          }
+        },
+        {
+          "id": "D",
+          "text": {
+            "en": "Zambezi",
+            "ru": "Замбези"
+          }
+        },
+        {
+          "id": "E",
+          "text": {
+            "en": "Danube",
+            "ru": "Дунай"
+          }
+        }
+      ],
+      "correct_answers": [
+        "C"
+      ],
+      "free_input": {
+        "answers": [
+          {
+            "for": "C",
+            "accept": {
+              "en": [
+                "Nile",
+                "River Nile"
+              ],
+              "ru": [
+                "Нил",
+                "река Нил"
+              ]
+            }
+          }
+        ],
+        "reject": {
+          "en": [
+            "Blue Nile",
+            "White Nile"
+          ],
+          "ru": [
+            "Голубой Нил",
+            "Белый Нил"
+          ]
+        }
+      },
+      "explanation": "The Blue Nile and the White Nile meet at Khartoum; the joined river reaches Cairo."
+    }
+  ]
+}

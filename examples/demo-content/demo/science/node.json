@@ -1,0 +1,8 @@
+{
+  "kind": "faculty",
+  "title": {
+    "en": "Faculty of Science",
+    "ru": "Факультет естественных наук"
+  },
+  "order": 10
+}

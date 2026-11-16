@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "subject": "Sample bank",
+  "language": "en",
+  "created_on": "2026-01-01",
+  "question_count": 5,
+  "single_choice_count": 3,
+  "multiple_choice_count": 2,
+  "difficulty_counts": { "1": 3, "2": 2 },
+  "instructions": {
+    "options_per_question": 3,
+    "single_choice": "Choose one answer.",
+    "multiple_choice": "Choose all correct answers.",
+    "difficulty": "difficulty_level: 1 — recall; 2 — application."
+  },
+  "exam_requirements": { "ticket_question_count": 2, "notes": ["Invented material for tests."] },
+  "topics": [
+    { "id": 1, "name": "Colours", "question_count": 3 },
+    { "id": 2, "name": "Shapes", "question_count": 2 }
+  ],
+  "sources": [{ "id": "S1", "title": "Sample notes" }],
+  "content_notes": ["Invented material for tests."],
+  "questions": [
+    {
+      "id": 1, "topic_id": 1, "difficulty_level": 1, "type": "single_choice",
+      "question": "Which colour is made by mixing blue and yellow?",
+      "instruction": "Choose one answer.",
+      "options": [{ "id": "A", "text": "Green" }, { "id": "B", "text": "Orange" }, { "id": "C", "text": "Purple" }],
+      "correct_answers": ["A"],
+      "source_references": [{ "source": "S1", "units": ["p1"] }]
+    },
+    {
+      "id": 2, "topic_id": 1, "difficulty_level": 1, "type": "multiple_choice",
+      "question": "Which of these are primary colours in the RGB model?",
+      "instruction": "Choose all correct answers.",
+      "options": [{ "id": "A", "text": "Red" }, { "id": "B", "text": "Yellow" }, { "id": "C", "text": "Blue" }],
+      "correct_answers": ["A", "C"],
+      "source_references": [{ "source": "S1", "units": ["p2"] }]
+    },
+    {
+      "id": 3, "topic_id": 2, "difficulty_level": 2, "type": "single_choice",
+      "question": "A polygon with five sides is called a...",
+      "instruction": "Choose one answer.",
+      "options": [{ "id": "A", "text": "Pentagon" }, { "id": "B", "text": "Hexagon" }, { "id": "C", "text": "Octagon" }],
+      "correct_answers": ["A"],
+      "source_references": [{ "source": "S1", "units": ["p3"] }]
+    },
+    {
+      "id": 4, "topic_id": 1, "difficulty_level": 2, "type": "multiple_choice",
+      "question": "Which of these colours are warm?",
+      "instruction": "Choose all correct answers.",
+      "options": [{ "id": "A", "text": "Red" }, { "id": "B", "text": "Blue" }, { "id": "C", "text": "Orange" }],
+      "correct_answers": ["A", "C"],
+      "source_references": [{ "source": "S1", "units": ["p4"] }]
+    },
+    {
+      "id": 5, "topic_id": 2, "difficulty_level": 1, "type": "single_choice",
+      "question": "How many sides does a triangle have?",
+      "instruction": "Choose one answer.",
+      "options": [{ "id": "A", "text": "Three" }, { "id": "B", "text": "Four" }, { "id": "C", "text": "Five" }],
+      "correct_answers": ["A"],
+      "source_references": [{ "source": "S1", "units": ["p5"] }]
+    }
+  ]
+}

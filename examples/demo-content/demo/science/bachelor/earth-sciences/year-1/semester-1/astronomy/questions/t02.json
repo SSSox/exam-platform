@@ -1,0 +1,83 @@
+{
+  "format": "exambank/2",
+  "bank": "demo/astronomy",
+  "questions": [
+    {
+      "id": 2,
+      "topic_id": 2,
+      "type": "single_choice",
+      "question": "What is the name of the galaxy that contains the Solar System?",
+      "options": [
+        {
+          "id": "A",
+          "text": "Andromeda"
+        },
+        {
+          "id": "B",
+          "text": "Milky Way"
+        },
+        {
+          "id": "C",
+          "text": "Triangulum"
+        },
+        {
+          "id": "D",
+          "text": "Sombrero"
+        },
+        {
+          "id": "E",
+          "text": "Whirlpool"
+        }
+      ],
+      "correct_answers": [
+        "B"
+      ],
+      "explanation": "The Milky Way is a barred spiral galaxy with hundreds of billions of stars."
+    },
+    {
+      "id": 6,
+      "topic_id": 2,
+      "type": "single_choice",
+      "question": "Which star is at the centre of the Solar System?",
+      "options": [
+        {
+          "id": "A",
+          "text": "Sirius"
+        },
+        {
+          "id": "B",
+          "text": "Polaris"
+        },
+        {
+          "id": "C",
+          "text": "The Sun"
+        },
+        {
+          "id": "D",
+          "text": "Betelgeuse"
+        },
+        {
+          "id": "E",
+          "text": "Vega"
+        }
+      ],
+      "correct_answers": [
+        "C"
+      ],
+      "free_input": {
+        "answers": [
+          {
+            "for": "C",
+            "accept": {
+              "en": [
+                "Sun",
+                "the Sun"
+              ]
+            }
+          }
+        ]
+      },
+      "explanation": "The Sun holds more than 99% of the mass of the Solar System."
+    }
+  ]
+}

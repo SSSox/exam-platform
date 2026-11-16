@@ -1,0 +1,96 @@
+{
+  "format": "exambank/2",
+  "bank": "demo/physics",
+  "questions": [
+    {
+      "id": 1,
+      "topic_id": 1,
+      "type": "single_choice",
+      "question": "The SI unit of force is the...",
+      "options": [
+        {
+          "id": "A",
+          "text": "Joule"
+        },
+        {
+          "id": "B",
+          "text": "Watt"
+        },
+        {
+          "id": "C",
+          "text": "Newton"
+        },
+        {
+          "id": "D",
+          "text": "Pascal"
+        },
+        {
+          "id": "E",
+          "text": "Ampere"
+        }
+      ],
+      "correct_answers": [
+        "C"
+      ],
+      "free_input": {
+        "answers": [
+          {
+            "for": "C",
+            "accept": {
+              "en": [
+                "newton"
+              ]
+            }
+          }
+        ]
+      },
+      "explanation": "One newton is the force that gives a mass of 1 kg an acceleration of 1 m/s squared."
+    },
+    {
+      "id": 2,
+      "topic_id": 1,
+      "type": "single_choice",
+      "question": "Which of these quantities has both magnitude and direction?",
+      "options": [
+        {
+          "id": "A",
+          "text": "Mass"
+        },
+        {
+          "id": "B",
+          "text": "Speed"
+        },
+        {
+          "id": "C",
+          "text": "Temperature"
+        },
+        {
+          "id": "D",
+          "text": "Velocity"
+        },
+        {
+          "id": "E",
+          "text": "Time"
+        }
+      ],
+      "correct_answers": [
+        "D"
+      ],
+      "explanation": "Velocity is speed in a given direction, so it is a vector."
+    },
+    {
+      "id": 4,
+      "topic_id": 1,
+      "type": "numeric",
+      "question": "A car covers 150 km in 2 hours at a constant speed. What is its speed?",
+      "answer": {
+        "value": 75,
+        "tolerance": 0,
+        "unit": {
+          "en": "km/h"
+        }
+      },
+      "explanation": "Speed = distance / time = 150 km / 2 h."
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "format": "exambank/2",
+  "id": "demo/chemistry",
+  "subject": "Chemistry",
+  "language": "en",
+  "license": "CC0-1.0",
+  "authors": [
+    "Demo Authors"
+  ],
+  "scoring": {
+    "multiple_choice": "exact"
+  },
+  "topics": [
+    {
+      "id": 1,
+      "name": "Elements"
+    },
+    {
+      "id": 2,
+      "name": "Compounds and reactions"
+    }
+  ]
+}

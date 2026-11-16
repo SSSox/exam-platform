@@ -1,0 +1,8 @@
+{
+  "kind": "university",
+  "title": {
+    "en": "Demo University",
+    "ru": "Демо-университет"
+  },
+  "order": 10
+}

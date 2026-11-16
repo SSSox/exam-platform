@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The page calls only the app's own update commands (src/update.rs); the updater plugin's commands are not granted, so the page cannot choose what to download.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

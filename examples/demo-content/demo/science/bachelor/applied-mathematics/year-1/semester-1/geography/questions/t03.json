@@ -1,0 +1,124 @@
+{
+  "format": "exambank/2",
+  "bank": "demo/geography",
+  "questions": [
+    {
+      "id": 6,
+      "topic_id": 3,
+      "difficulty_level": 1,
+      "type": "single_choice",
+      "question": {
+        "en": "What is the capital of Australia?",
+        "ru": "Какой город является столицей Австралии?"
+      },
+      "options": [
+        {
+          "id": "A",
+          "text": {
+            "en": "Sydney",
+            "ru": "Сидней"
+          }
+        },
+        {
+          "id": "B",
+          "text": {
+            "en": "Melbourne",
+            "ru": "Мельбурн"
+          }
+        },
+        {
+          "id": "C",
+          "text": {
+            "en": "Canberra",
+            "ru": "Канберра"
+          }
+        },
+        {
+          "id": "D",
+          "text": {
+            "en": "Perth",
+            "ru": "Перт"
+          }
+        },
+        {
+          "id": "E",
+          "text": {
+            "en": "Brisbane",
+            "ru": "Брисбен"
+          }
+        }
+      ],
+      "correct_answers": [
+        "C"
+      ],
+      "free_input": {
+        "answers": [
+          {
+            "for": "C",
+            "accept": {
+              "en": [
+                "Canberra"
+              ],
+              "ru": [
+                "Канберра"
+              ]
+            }
+          }
+        ]
+      },
+      "explanation": "Canberra was founded as a compromise between the rival cities of Sydney and Melbourne."
+    },
+    {
+      "id": 7,
+      "topic_id": 3,
+      "difficulty_level": 2,
+      "type": "multiple_choice",
+      "question": {
+        "en": "Which of these countries are landlocked?",
+        "ru": "Какие из этих стран не имеют выхода к морю?"
+      },
+      "options": [
+        {
+          "id": "A",
+          "text": {
+            "en": "Switzerland",
+            "ru": "Швейцария"
+          }
+        },
+        {
+          "id": "B",
+          "text": {
+            "en": "Norway",
+            "ru": "Норвегия"
+          }
+        },
+        {
+          "id": "C",
+          "text": {
+            "en": "Mongolia",
+            "ru": "Монголия"
+          }
+        },
+        {
+          "id": "D",
+          "text": {
+            "en": "Portugal",
+            "ru": "Португалия"
+          }
+        },
+        {
+          "id": "E",
+          "text": {
+            "en": "Egypt",
+            "ru": "Египет"
+          }
+        }
+      ],
+      "correct_answers": [
+        "A",
+        "C"
+      ],
+      "explanation": "A landlocked country has no coast. Norway, Portugal and Egypt all border a sea or an ocean."
+    }
+  ]
+}

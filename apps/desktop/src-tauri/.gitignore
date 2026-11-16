@@ -1,0 +1,4 @@
+target/
+# The Android project in gen/android is kept in the repository: MainActivity.kt, the manifest and res/ are edited by hand.
+# Its build output is ignored by gen/android/.gitignore.
+gen/schemas/

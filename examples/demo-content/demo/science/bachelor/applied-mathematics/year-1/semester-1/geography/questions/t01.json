@@ -1,0 +1,239 @@
+{
+  "format": "exambank/2",
+  "bank": "demo/geography",
+  "questions": [
+    {
+      "id": 1,
+      "topic_id": 1,
+      "difficulty_level": 1,
+      "type": "single_choice",
+      "question": {
+        "en": "The largest ocean on Earth is the...",
+        "ru": "Самый большой океан на Земле называется..."
+      },
+      "options": [
+        {
+          "id": "A",
+          "text": {
+            "en": "Atlantic Ocean",
+            "ru": "Атлантический океан"
+          }
+        },
+        {
+          "id": "B",
+          "text": {
+            "en": "Pacific Ocean",
+            "ru": "Тихий океан"
+          }
+        },
+        {
+          "id": "C",
+          "text": {
+            "en": "Indian Ocean",
+            "ru": "Индийский океан"
+          }
+        },
+        {
+          "id": "D",
+          "text": {
+            "en": "Arctic Ocean",
+            "ru": "Северный Ледовитый океан"
+          }
+        },
+        {
+          "id": "E",
+          "text": {
+            "en": "Southern Ocean",
+            "ru": "Южный океан"
+          }
+        }
+      ],
+      "correct_answers": [
+        "B"
+      ],
+      "free_input": {
+        "answers": [
+          {
+            "for": "B",
+            "accept": {
+              "en": [
+                "Pacific",
+                "Pacific Ocean"
+              ],
+              "ru": [
+                "Тихий",
+                "Тихий океан"
+              ]
+            }
+          }
+        ]
+      },
+      "explanation": "The Pacific Ocean covers about a third of the planet's surface."
+    },
+    {
+      "id": 2,
+      "topic_id": 1,
+      "difficulty_level": 2,
+      "type": "multiple_choice",
+      "question": {
+        "en": "Which continents lie entirely in the Southern Hemisphere?",
+        "ru": "Какие материки целиком расположены в Южном полушарии?"
+      },
+      "options": [
+        {
+          "id": "A",
+          "text": {
+            "en": "Antarctica",
+            "ru": "Антарктида"
+          }
+        },
+        {
+          "id": "B",
+          "text": {
+            "en": "Australia",
+            "ru": "Австралия"
+          }
+        },
+        {
+          "id": "C",
+          "text": {
+            "en": "South America",
+            "ru": "Южная Америка"
+          }
+        },
+        {
+          "id": "D",
+          "text": {
+            "en": "Africa",
+            "ru": "Африка"
+          }
+        },
+        {
+          "id": "E",
+          "text": {
+            "en": "Europe",
+            "ru": "Европа"
+          }
+        }
+      ],
+      "correct_answers": [
+        "A",
+        "B"
+      ],
+      "free_input": {
+        "question": {
+          "en": "Name the two continents that lie entirely in the Southern Hemisphere.",
+          "ru": "Назовите два материка, которые целиком расположены в Южном полушарии."
+        },
+        "answers": [
+          {
+            "for": "A",
+            "accept": {
+              "en": [
+                "Antarctica"
+              ],
+              "ru": [
+                "Антарктида"
+              ]
+            }
+          },
+          {
+            "for": "B",
+            "accept": {
+              "en": [
+                "Australia"
+              ],
+              "ru": [
+                "Австралия"
+              ]
+            }
+          }
+        ]
+      },
+      "explanation": "South America and Africa both cross the equator; Europe lies in the north."
+    },
+    {
+      "id": 5,
+      "topic_id": 1,
+      "difficulty_level": 1,
+      "type": "numeric",
+      "question": {
+        "en": "How many continents are there in the common seven-continent model?",
+        "ru": "Сколько материков в распространённой модели из семи материков?"
+      },
+      "answer": {
+        "value": 7,
+        "tolerance": 0,
+        "unit": null
+      },
+      "explanation": "Africa, Antarctica, Asia, Australia, Europe, North America and South America."
+    },
+    {
+      "id": 8,
+      "topic_id": 1,
+      "difficulty_level": 1,
+      "type": "single_choice",
+      "question": {
+        "en": "Which imaginary line divides the Earth into the Northern and Southern Hemispheres?",
+        "ru": "Какая воображаемая линия делит Землю на Северное и Южное полушария?"
+      },
+      "options": [
+        {
+          "id": "A",
+          "text": {
+            "en": "Tropic of Cancer",
+            "ru": "Тропик Рака"
+          }
+        },
+        {
+          "id": "B",
+          "text": {
+            "en": "Equator",
+            "ru": "Экватор"
+          }
+        },
+        {
+          "id": "C",
+          "text": {
+            "en": "Prime Meridian",
+            "ru": "Нулевой меридиан"
+          }
+        },
+        {
+          "id": "D",
+          "text": {
+            "en": "Arctic Circle",
+            "ru": "Северный полярный круг"
+          }
+        },
+        {
+          "id": "E",
+          "text": {
+            "en": "Tropic of Capricorn",
+            "ru": "Тропик Козерога"
+          }
+        }
+      ],
+      "correct_answers": [
+        "B"
+      ],
+      "free_input": {
+        "answers": [
+          {
+            "for": "B",
+            "accept": {
+              "en": [
+                "Equator",
+                "the Equator"
+              ],
+              "ru": [
+                "Экватор"
+              ]
+            }
+          }
+        ]
+      },
+      "explanation": "The Equator lies at 0 degrees latitude."
+    }
+  ]
+}

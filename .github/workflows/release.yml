@@ -1,0 +1,157 @@
+# Builds the Windows installer on a clean GitHub machine and, once SignPath is set up, code-signs the app and the installer.
+# It publishes nothing. The release also carries the Android APK and latest.json, signed with keys that stay on the
+# maintainer's computer: `npm run release -- --windows=<the installer of this run>` makes it (docs/PUBLISHING.md).
+# Signing starts once the repository has the SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT and SIGNPATH_POLICY variables
+# and the SIGNPATH_API_TOKEN secret. Without them the run still builds and keeps an unsigned installer.
+name: Windows installer
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    # SignPath accepts open source builds only from GitHub-hosted runners.
+    runs-on: windows-2025
+    # Leaves room to approve both signing requests.
+    timeout-minutes: 350
+    permissions:
+      contents: read
+      # SignPath fetches the uploaded artifacts of this run.
+      actions: read
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      # The banks built into the app come from the content repository, as in a local build next to ../exam-content.
+      EXAM_CONTENT_DIR: ${{ github.workspace }}\exam-content
+      SIGNING: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+      POLICY: ${{ vars.SIGNPATH_POLICY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/exam-content
+          path: exam-content
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+
+      - name: Read the version
+        run: |
+          $config = Get-Content -LiteralPath apps\desktop\src-tauri\tauri.conf.json -Raw | ConvertFrom-Json
+          $version = $config.version
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -cne "v$version") { throw "Tag $env:GITHUB_REF_NAME does not match version $version in tauri.conf.json." }
+          # An installer built without the updater's public key never looks for updates, and neither do the PCs that install it.
+          if (!"$($config.plugins.updater.pubkey)".Trim()) { throw 'plugins.updater.pubkey in tauri.conf.json is empty in this commit: the installer would never update itself.' }
+          if (!(Test-Path -LiteralPath "$env:EXAM_CONTENT_DIR\catalog.json")) { throw 'The content repository has no catalog.json: the app would ship the demo banks.' }
+          "VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Run the checks
+        run: |
+          npm ci --ignore-scripts
+          if ($LASTEXITCODE) { throw 'npm ci failed.' }
+          npx tsc -p .
+          if ($LASTEXITCODE) { throw 'Type check failed.' }
+          npx vitest run
+          if ($LASTEXITCODE) { throw 'Tests failed.' }
+          node packages/content-tools/src/cli.ts validate $env:EXAM_CONTENT_DIR
+          if ($LASTEXITCODE) { throw 'The banks did not pass validation.' }
+
+      # The installer is packed later, from the signed app: packing first would put the unsigned app inside it.
+      - name: Build the app
+        working-directory: apps/desktop
+        run: |
+          npx tauri build --no-bundle
+          if ($LASTEXITCODE) { throw 'Build failed.' }
+          New-Item -ItemType Directory -Path ..\..\build\application -Force | Out-Null
+          Copy-Item -LiteralPath src-tauri\target\release\exam-desktop.exe -Destination ..\..\build\application
+
+      - id: unsigned-application
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-application
+          path: build/application
+          if-no-files-found: error
+      - name: Sign the app
+        if: env.SIGNING == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY }}
+          artifact-configuration-slug: application
+          github-artifact-id: ${{ steps.unsigned-application.outputs.artifact-id }}
+          parameters: |
+            version: "${{ env.VERSION }}"
+          wait-for-completion-timeout-in-seconds: 7200
+          output-artifact-directory: build/signed-application
+      - name: Use the signed app
+        if: env.SIGNING == 'true'
+        run: .\apps\desktop\scripts\check-signature.ps1 -SignedRoot build\signed-application -TargetRoot apps\desktop\src-tauri\target\release -TestCertificate:($env:POLICY -ne 'release-signing')
+
+      # --no-binary-patching keeps the signed app byte for byte (the bundler would otherwise write the bundle type into it
+      # and break the signature); the updater then looks up `windows-x86_64` in latest.json, which is the key it gets.
+      # --no-sign: the updater signature is made on the maintainer's computer, over the final signed installer.
+      - name: Pack the installer
+        working-directory: apps/desktop
+        run: |
+          npx tauri bundle --bundles nsis --no-sign --no-binary-patching
+          if ($LASTEXITCODE) { throw 'Packing failed.' }
+          New-Item -ItemType Directory -Path ..\..\build\installer -Force | Out-Null
+          Copy-Item -LiteralPath "src-tauri\target\release\bundle\nsis\Exam Trainer_$($env:VERSION)_x64-setup.exe" -Destination ..\..\build\installer\exam-trainer-windows-setup.exe
+
+      - id: unsigned-installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-installer
+          path: build/installer
+          if-no-files-found: error
+      - name: Sign the installer
+        if: env.SIGNING == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          parameters: |
+            version: "${{ env.VERSION }}"
+          wait-for-completion-timeout-in-seconds: 7200
+          output-artifact-directory: build/signed-installer
+      - name: Use the signed installer
+        if: env.SIGNING == 'true'
+        run: .\apps\desktop\scripts\check-signature.ps1 -SignedRoot build\signed-installer -TargetRoot build\installer -TestCertificate:($env:POLICY -ne 'release-signing')
+
+      # Installs into a throwaway folder of this machine and checks that the installed app still carries its signature.
+      # Runs on unsigned builds too, so the first trial run already proves the silent install.
+      - name: Check the installed app
+        timeout-minutes: 10
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'exam-trainer'
+          Start-Process -FilePath build\installer\exam-trainer-windows-setup.exe -ArgumentList '/S', "/D=$folder" -Wait
+          $apps = @(Get-ChildItem -LiteralPath $folder -Filter *.exe -File | Where-Object Name -notlike 'uninstall*')
+          if ($apps.Count -ne 1) { throw "Expected one app in $folder, found: $($apps.Name -join ', ')" }
+          if ($env:SIGNING -ne 'true') { "Installed $($apps[0].Name), not signed: SignPath is not set up"; return }
+          $signature = Get-AuthenticodeSignature -LiteralPath $apps[0].FullName
+          if (!$signature.SignerCertificate) { throw "The installed app is not signed: $($signature.Status)" }
+          if ($env:POLICY -eq 'release-signing' -and $signature.Status -ne 'Valid') { throw "The installed app's signature is $($signature.Status)" }
+          "Installed app signed by $($signature.SignerCertificate.Subject)"
+
+      - name: Keep the installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-installer-${{ env.VERSION }}
+          path: build/installer/exam-trainer-windows-setup.exe
+          retention-days: 14
+          if-no-files-found: error

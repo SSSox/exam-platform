@@ -1,0 +1,8 @@
+{
+  "kind": "specialty",
+  "title": {
+    "en": "Applied Mathematics",
+    "ru": "Прикладная математика"
+  },
+  "order": 10
+}
