@@ -118,7 +118,7 @@ $env:VITE_CONTENT_URLS = "https://<пользователь>.github.io/<репо
 npm --prefix apps/ui run build
 ```
 
-В этом репозитории это делает [`.github/workflows/pages.yml`](../.github/workflows/pages.yml). При каждом push в `main` он проверяет типы и тесты, собирает страницу с `EXAM_CONTENT_DIR=none` и публикует её; правки только в документации сборку не запускают. Адрес банков workflow берёт из `content-sources.json`, поэтому в форке достаточно поменять этот файл. В настройках репозитория (Settings, Pages) источником должен стоять «GitHub Actions».
+В этом репозитории это делает [`.github/workflows/pages.yml`](../.github/workflows/pages.yml). При каждом push в `main` он проверяет типы и тесты, собирает страницу с `EXAM_CONTENT_DIR=none` и публикует её; правки только в документации сборку не запускают. Адрес банков workflow берёт из `content-sources.json`, поэтому форк вписывает туда свой адрес банков (ссылки на установщики берутся из `downloads.json`, см. ниже). В настройках репозитория (Settings, Pages) источником должен стоять «GitHub Actions».
 
 Приложение будет доступно по адресу `https://<пользователь>.github.io/<репозиторий-кода>/`.
 

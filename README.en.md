@@ -49,7 +49,7 @@ The screenshots use the demo banks from `examples/demo-content`.
 
 ## Installation
 
-Without installing anything, the app opens in the browser: [web version](https://sssox.github.io/exam-platform/). It keeps answers and progress in that browser.
+The app also opens in the browser, with nothing to install: [web version](https://sssox.github.io/exam-platform/). It keeps answers and progress in that browser.
 
 Windows 10 and 11, 64-bit. Download the [installer](https://github.com/SSSox/exam-platform/releases/latest/download/exam-trainer-windows-setup.exe) and run it. Until the installer carries a publisher signature, SmartScreen may show a "Windows protected your PC" window. To go on, click "More info", then "Run anyway". The [Code signing policy](#code-signing-policy) section explains why there is no signature yet.
 
@@ -146,7 +146,7 @@ VITE_CONTENT_URLS=https://<user>.github.io/<bank-repository>
 
 The address in the example is a placeholder: use the address of your own bank repository. In PowerShell, variables are set through `$env:`, as in the example above. The app page loads content only from `https://*.github.io` and `https://cdn.jsdelivr.net`. If the banks are on another host, add it to `connect-src` in `apps/ui/index.html`.
 
-Step-by-step publishing of the app and the banks, with workflow templates for GitHub Actions: [docs/PUBLISHING.en.md](docs/PUBLISHING.en.md).
+Step-by-step publishing of the app and the banks, with a workflow template for the banks repository: [docs/PUBLISHING.en.md](docs/PUBLISHING.en.md).
 
 ## Build
 

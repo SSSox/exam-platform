@@ -118,7 +118,7 @@ $env:VITE_CONTENT_URLS = "https://<user>.github.io/<banks-repo>"
 npm --prefix apps/ui run build
 ```
 
-In this repository [`.github/workflows/pages.yml`](../.github/workflows/pages.yml) does it. On every push to `main` it runs the type check and the tests, builds the page with `EXAM_CONTENT_DIR=none` and publishes it; changes to documentation alone do not start it. The workflow takes the bank address from `content-sources.json`, so a fork only has to change that file. In the repository settings (Settings, Pages) the source must be "GitHub Actions".
+In this repository [`.github/workflows/pages.yml`](../.github/workflows/pages.yml) does it. On every push to `main` it runs the type check and the tests, builds the page with `EXAM_CONTENT_DIR=none` and publishes it; changes to documentation alone do not start it. The workflow takes the bank address from `content-sources.json`, so a fork sets its own banks address in that file (the download links come from `downloads.json`, see below). In the repository settings (Settings, Pages) the source must be "GitHub Actions".
 
 The app will be available at `https://<user>.github.io/<code-repo>/`.
 

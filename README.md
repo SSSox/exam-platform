@@ -146,7 +146,7 @@ VITE_CONTENT_URLS=https://<пользователь>.github.io/<репозито
 
 Адрес в примере условный: подставьте адрес своего репозитория банков. В PowerShell переменные задаются через `$env:`, как в примере выше. Страница приложения загружает контент только с `https://*.github.io` и `https://cdn.jsdelivr.net`. Если банки лежат на другом хосте, добавьте его в `connect-src` в `apps/ui/index.html`.
 
-Пошаговая публикация приложения и банков, вместе с шаблонами workflow для GitHub Actions: [docs/PUBLISHING.md](docs/PUBLISHING.md).
+Пошаговая публикация приложения и банков, с шаблоном workflow для репозитория банков: [docs/PUBLISHING.md](docs/PUBLISHING.md).
 
 ## Сборка
 
