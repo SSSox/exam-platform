@@ -184,10 +184,9 @@ The workflow starts on a `vX.Y.Z` tag or by hand (Actions, Windows installer, Ru
 
 Setup, once:
 
-1. Apply at [signpath.org](https://signpath.org). Their terms: an open license (GPL fits), no closed code, two-factor login on GitHub and in SignPath for all members, and the project already released in the form in which it will be signed. So the first release goes out unsigned. The "Code signing policy" section that SignPath requires is already in the README.
+1. Apply at [signpath.org](https://signpath.org). Their terms: an open license (GPL fits), no closed code, two-factor login on GitHub and in SignPath for all members, and the project already released in the form in which it will be signed. So the first release goes out unsigned.
 2. Go through the setup SignPath offers after approval (organization, project, signing policy, connecting GitHub Actions as the build source). The repository expects two artifact configurations in the project with the slugs `application` and `installer`: create them and paste into them the files from [`.signpath/artifact-configurations/`](../.signpath/artifact-configurations/).
 3. In the GitHub repository (Settings, Secrets and variables, Actions) set the variables `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT` (the project slug) and `SIGNPATH_POLICY` (`release-signing`; for a trial with a test certificate, `test-signing`) and the secret `SIGNPATH_API_TOKEN`.
-4. Add to the "Code signing policy" section of all three READMEs the line that SignPath requires: "Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org)".
 
 With the `release-signing` policy the workflow accepts only files with a valid SignPath Foundation signature (with `test-signing`, any signature: Windows does not trust the test certificate), and after signing it installs the installer into an empty folder and checks the signature of the installed app. The uninstaller that NSIS puts next to the app gets no separate signature.
 
@@ -205,7 +204,7 @@ With the `release-signing` policy the workflow accepts only files with a valid S
 
    In PowerShell the variables are set like this: `$env:TAURI_SIGNING_PRIVATE_KEY_PATH = "$HOME\.tauri\exam-trainer.key"`.
 
-   The script puts the installer and the APK into `release/` (git ignores it) under the names `exam-trainer-windows-setup.exe` and `exam-trainer-android.apk`, signs both with the update key and writes `latest.json`. This signature is put on a file that SignPath has already signed, so SignPath comes first and `npm run release` second. The script refuses an installer of another version, the app itself instead of the installer, and an installer without a valid code signature. Until SignPath approves the project, add `--unsigned`: an unsigned installer then passes with a warning. `--notes="..."` adds a description to `latest.json`.
+   The script puts the installer and the APK into `release/` (git ignores it) under the names `exam-trainer-windows-setup.exe` and `exam-trainer-android.apk`, signs both with the update key and writes `latest.json`. This signature is put on a file that SignPath has already signed, so SignPath comes first and `npm run release` second. The script refuses an installer of another version, the app itself instead of the installer, and an installer without a valid code signature. If the GitHub Actions installer (`--windows=…`) has no code signature, add `--unsigned`: it then passes with a warning. `--notes="..."` adds a description to `latest.json`.
 4. Publish the release with the command the script printed, or by hand on GitHub (Releases, Draft a new release) with the same three files:
 
    ```bash
