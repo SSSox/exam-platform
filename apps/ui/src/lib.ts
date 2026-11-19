@@ -221,7 +221,8 @@ export function withoutWritten(kept: ProgressEvent[], written: ProgressEvent[]):
 
 /**
  * What starting `next` does with the exam kept in storage: `flush` when the kept one has ended and its answers may not be in the log yet
- * (they are written first, and the key goes only once the log has them), `clear` when practice starts over an unfinished kept exam, else `none`.
+ * (they are written first; their copy in `KEYS.unwritten` stays until the log has them, so a new exam may take the exam key at once),
+ * `clear` when practice starts over an unfinished kept exam, else `none`.
  * The same session (every answer calls `run` again) and leaving (`next` is nothing) never touch the key.
  */
 export function keptOnStart(kept: Pick<SavedExam, "session" | "pending"> | undefined, next: Pick<Session, "id" | "config"> | undefined): "none" | "flush" | "clear" {

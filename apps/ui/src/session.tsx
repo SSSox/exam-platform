@@ -231,7 +231,7 @@ export function SessionScreen() {
 
   /**
    * Ends the session. An exam first takes the answers still unsent as its answers, then writes them all to the log. Until the log has them
-   * they wait in the kept copy as events (`pending`): a failed write or an app closed at this moment loses nothing, and the next launch
+   * they wait in the kept copy as events (`pending`, and in `KEYS.unwritten`, which outlives the kept copy when a new exam replaces it): a failed write or an app closed at this moment loses nothing, and the next launch
    * writes the same events, not a second set. The write and its state belong to `Root` (`storePending`), not to this screen, which is
    * mounted again when the learner goes Back and Forward.
    */
