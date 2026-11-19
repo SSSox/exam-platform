@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, ChevronDown, SlidersHorizontal } from "lucide-react";
-import { bankStats, createSession, entriesOf, modeFor, pickAdaptive, placeOf, project, uuidv7, walk, type AnswerMode, type SessionConfig, type Status as QuestionStatus } from "@exam/core";
+import { bankStats, entriesOf, placeOf, project, uuidv7, walk, type AnswerMode, type Status as QuestionStatus } from "@exam/core";
 import type { Question } from "@exam/schema";
 import { client, deviceId, storePlace } from "./platform.ts";
 import { Status, useApp, useAsync } from "./app.tsx";
@@ -11,7 +11,7 @@ import { Segmented, Select, SideSheet, useDockHeight, useWide } from "./ui.tsx";
 import { Peek } from "./peek.tsx";
 import { STATUSES, StatusMark } from "./status.tsx";
 import { Stops, stopsOf } from "./stops.tsx";
-import { homeOf, lineOf, pageAbove, pathNames, stationsOf } from "./lib.ts";
+import { buildSession, homeOf, lineOf, pageAbove, pathNames, stationsOf } from "./lib.ts";
 
 type Filter = QuestionStatus | "due" | null;
 type Scope = "smart" | "all" | "mistakes" | "bookmarks";
@@ -154,26 +154,14 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
 
   /** `only` opens a session on that one question, whatever the panel says. */
   const start = (only?: Question) => {
-    const practice = only != null || kind === "practice";
-    const smart = !only && practice && scope === "smart";
-    const seed = Date.now() % 2 ** 31;
-    let ids = only ? [only.id] : scope === "mistakes" ? stats.mistakes : scope === "bookmarks" ? stats.bookmarks : undefined;
-    if (smart) {
-      // Only questions the chosen answer mode can ask, or the draw could hand the session questions it then drops.
-      const pool = active.filter((q) => fits(q) && modeFor(q, { answerMode, unsupported: settings.unsupported }));
-      ids = pickAdaptive(pool, states, Date.now(), count || undefined, seed);
-    }
-    if (only) setOpen(undefined);
-    if (ids && !ids.length) return setNothing(true);
-    // A question opened from the map is always asked, in the nearest mode it supports.
-    const config: SessionConfig = {
-      kind: practice ? "practice" : "exam", answerMode, unsupported: only ? "self_check" : settings.unsupported, shuffle: true, seed, keepOrder: smart, relearn: practice,
-      topics: only ? [] : topics, levels: !only && level ? [level] : undefined, ids, count: only ? 1 : count || undefined,
-      timeLimitSec: !practice && minutes ? minutes * 60 : undefined, passPercent: !practice ? 50 : undefined,
-    };
-    const session = createSession(bank.id, bundle.questions, config, Date.now(), uuidv7(Date.now()));
-    if (!session.items.length) return setNothing(true);
-    setOpen(undefined);
+    const at = Date.now();
+    const setup = { scope, answerMode, kind, topics, level, count, minutes };
+    const session = buildSession({
+      bankId: bank.id, questions: bundle.questions, states, stats, setup, unsupported: settings.unsupported,
+      only: only && [only.id], now: at, seed: at % 2 ** 31, id: uuidv7(at),
+    });
+    if (only || session) setOpen(undefined);
+    if (!session) return setNothing(true);
     run({ session, bundle, back: location.hash, line, hash: ref.hash });
     location.hash = "#/session";
   };

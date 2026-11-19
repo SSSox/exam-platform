@@ -10,6 +10,11 @@ export type ProgressEvent =
       /** Hash of the question content at the time of the attempt. */
       rev: string;
       mode: AnswerMode; correct: boolean; score: number; matchKind: string; response: Response; locale: string; session: string; ms: number;
+      /**
+       * Set only on the answers of a mock exam, with how many questions it had: unanswered ones leave no event, so the size cannot be counted back.
+       * Optional fields rather than a new event type, because older app versions that replay an imported log would not know the type.
+       */
+      exam?: true; of?: number;
     }
   | { id: string; type: "bookmark"; at: number; device: string; bank: string; question: number; value: boolean }
   /** The learner says a typed answer marked wrong was right; counted apart from both right and wrong. */
@@ -42,10 +47,32 @@ export function mergeLogs(...logs: ProgressEvent[][]): ProgressEvent[] {
 /** The log record for one answered item of a session. */
 export function attemptEvent(s: Session, item: SessionItem, q: Question, at: number, device: string, locale: string, id = uuidv7(at)): AttemptEvent {
   if (!item.graded || !item.response || item.question !== q.id) throw new Error("item is not answered");
-  return {
+  const event: AttemptEvent = {
     id, type: "attempt", at, device, bank: s.bank, question: q.id, rev: revision(q), mode: item.mode,
     correct: item.graded.correct, score: item.graded.score, matchKind: item.graded.matchKind, response: item.response, locale, session: s.id, ms: item.ms ?? 0,
   };
+  // Practice events keep exactly the keys they always had.
+  return s.config.kind === "exam" ? { ...event, exam: true, of: s.items.length } : event;
+}
+
+export interface ExamResult { session: string; at: number; correct: number; of: number; percent: number }
+
+/** Mock exams of a bank, newest first, from the log. An answer the learner disputed does not count as right, as in `project()`. */
+export function examHistory(events: ProgressEvent[], bank: string): ExamResult[] {
+  const own = events.filter((e) => e.bank === bank);
+  const disputed = new Set(own.flatMap((e) => (e.type === "dispute" ? [e.attempt] : [])));
+  const bySession = new Map<string, { at: number; correct: number; of: number }>();
+  for (const e of own) {
+    // A log from outside can carry the marker without a usable size; such an exam cannot be scored.
+    if (e.type !== "attempt" || e.exam !== true || !Number.isSafeInteger(e.of) || e.of! <= 0) continue;
+    const exam = bySession.get(e.session) ?? { at: e.at, correct: 0, of: e.of! };
+    exam.at = Math.max(exam.at, e.at);
+    if (e.correct && !disputed.has(e.id)) exam.correct++;
+    bySession.set(e.session, exam);
+  }
+  return [...bySession]
+    .map(([session, x]) => ({ session, ...x, percent: Math.round((100 * Math.min(x.correct, x.of)) / x.of) }))
+    .sort((a, b) => b.at - a.at || (a.session < b.session ? -1 : 1));
 }
 
 export interface ModeState { attempts: number; correct: number; disputed: number; streak: number; lastCorrect?: boolean }

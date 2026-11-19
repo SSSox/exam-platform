@@ -1,4 +1,5 @@
-import { LEARNED_BOX, entriesOf, goTo, isFork, strength, submit, type BankBundle, type ContentIndex, type Entry, type NodeManifest, type NodeRef, type ProgressEvent, type QuestionState, type Response, type Session, type SessionItem, type Target } from "@exam/core";
+import { LEARNED_BOX, createSession, entriesOf, goTo, isDue, isFork, modeFor, pickAdaptive, strength, submit, type AnswerMode, type BankBundle, type BankStats, type ContentIndex, type Entry, type NodeManifest, type NodeRef, type ProgressEvent, type QuestionState, type Response, type Session, type SessionConfig, type SessionItem, type Target } from "@exam/core";
+import type { Localized, Question } from "@exam/schema";
 
 /**
  * What the result counts as shown. An exam counts every question, answered or not. Practice moves only forward, so an item behind
@@ -9,7 +10,7 @@ export const shown = (s: Pick<Session, "config" | "items" | "index">) =>
   s.items.filter((item, i) => s.config.kind === "exam" || item.graded != null || i < s.index);
 
 /** The app's own keys in local storage. On a shared origin (a github.io site) any other key belongs to someone else. */
-export const KEYS = { settings: "settings", place: "place", device: "device", exam: "exam", updateCheck: "updateCheck" } as const;
+export const KEYS = { settings: "settings", place: "place", device: "device", exam: "exam", updateCheck: "updateCheck", setup: "setup", backup: "backup" } as const;
 
 /**
  * Removes everything the app keeps on the device: the stored tables (the progress log, the downloaded banks) and its own keys in local storage.
@@ -328,3 +329,169 @@ export const isUpdateDue = (lastCheck: number | undefined, now: number): boolean
  * again and offers it again; a failed check is retried at the next launch too.
  */
 export const isCheckDone = (phase: UpdatePhase): boolean => phase === "latest";
+
+/** What the learner chose on a bank's preparation panel. */
+export interface Setup { scope: "smart" | "all" | "mistakes" | "bookmarks"; answerMode: AnswerMode; kind: "practice" | "exam"; topics: number[]; level: number; count: number; minutes: number }
+
+export interface SessionInput {
+  bankId: string; questions: Question[]; states: Map<number, QuestionState>; stats: Pick<BankStats, "mistakes" | "bookmarks">; setup: Setup;
+  unsupported: "self_check" | "skip";
+  /** Explicit questions (one opened from the map, the mistakes of the last session): always practice, asked in the nearest mode they support. */
+  only?: number[]; now: number; seed: number; id: string;
+}
+
+/** The session the panel asks for, or nothing when no question fits. */
+export function buildSession(input: SessionInput): Session | undefined {
+  const { questions, states, stats, setup, only, now } = input;
+  const practice = only != null || setup.kind === "practice";
+  const smart = !only && practice && setup.scope === "smart";
+  const unsupported = only ? "self_check" : input.unsupported;
+  const fits = (q: Question) => (!setup.topics.length || setup.topics.includes(q.topic_id)) && (!setup.level || q.difficulty_level === setup.level);
+  let ids = only ?? (setup.scope === "mistakes" ? stats.mistakes : setup.scope === "bookmarks" ? stats.bookmarks : undefined);
+  if (smart) {
+    // Only questions the chosen answer mode can ask, or the draw could hand the session questions it then drops.
+    const pool = questions.filter((q) => !q.retired && fits(q) && modeFor(q, { answerMode: setup.answerMode, unsupported }));
+    ids = pickAdaptive(pool, states, now, setup.count || undefined, input.seed);
+  }
+  // An empty id list would mean "no restriction" to createSession, so it must stop here.
+  if (ids && !ids.length) return undefined;
+  const config: SessionConfig = {
+    kind: practice ? "practice" : "exam", answerMode: setup.answerMode, unsupported, shuffle: true, seed: input.seed, keepOrder: smart, relearn: practice,
+    topics: only ? [] : setup.topics, levels: !only && setup.level ? [setup.level] : undefined, ids, count: only ? only.length : setup.count || undefined,
+    timeLimitSec: !practice && setup.minutes ? setup.minutes * 60 : undefined, passPercent: !practice ? 50 : undefined,
+  };
+  const session = createSession(input.bankId, questions, config, now, input.id);
+  return session.items.length ? session : undefined;
+}
+
+const SCOPES = ["smart", "all", "mistakes", "bookmarks"];
+const KINDS = ["practice", "exam"];
+const DEFAULT_SETUP: Setup = { scope: "smart", answerMode: "choice", kind: "practice", topics: [], level: 0, count: 20, minutes: 20 };
+const SETUPS_KEPT = 30;
+
+const isSetup = (x: unknown): x is Setup =>
+  isObject(x) && SCOPES.includes(x.scope as string) && MODES.includes(x.answerMode as string) && KINDS.includes(x.kind as string)
+  && Array.isArray(x.topics) && x.topics.every((t) => Number.isSafeInteger(t)) && isNumber(x.level) && isNumber(x.count) && isNumber(x.minutes);
+
+/** The stored form is a list of [bank, setup] pairs, oldest first: an object would sort keys that look like numbers. A plain object is read too. */
+function readSetups(raw: string | null | undefined): [string, Setup][] {
+  const x = raw ? safeParse(raw) : null;
+  const pairs: unknown[] = Array.isArray(x) ? x : isObject(x) ? Object.entries(x) : [];
+  return pairs.filter((p): p is [string, Setup] => Array.isArray(p) && p.length === 2 && typeof p[0] === "string" && isSetup(p[1]));
+}
+
+/** The remembered setups by bank id. Never throws; an entry that is not well-formed is dropped. */
+export const parseSetups = (raw: string | null | undefined): Record<string, Setup> => Object.fromEntries(readSetups(raw));
+
+/** The setup put last and only the `limit` most recently stored banks kept. */
+export function storeSetup(raw: string | null | undefined, bankId: string, setup: Setup, limit = SETUPS_KEPT): string {
+  const rest = readSetups(raw).filter(([id]) => id !== bankId);
+  return JSON.stringify([...rest, [bankId, setup]].slice(-Math.max(1, limit)));
+}
+
+export interface BankFacts { topicIds: number[]; levels: number[]; mistakes: number; bookmarks: number; questions: number }
+
+const whole = (n: number, max = Infinity) => Math.min(max, Math.max(0, Number.isFinite(n) ? Math.round(n) : 0));
+
+/** A remembered setup made valid for the bank as it is now (topics, levels and lists may have changed), or the default when none is saved. */
+export function fitSetup(saved: Setup | undefined, facts: BankFacts): Setup {
+  if (!saved) return { ...DEFAULT_SETUP, topics: [] };
+  let scope = saved.scope;
+  if ((scope === "mistakes" && !facts.mistakes) || (scope === "bookmarks" && !facts.bookmarks)) scope = "smart";
+  if (saved.kind === "exam" && scope === "smart") scope = "all";
+  return {
+    scope, answerMode: saved.answerMode, kind: saved.kind,
+    topics: saved.topics.filter((id) => facts.topicIds.includes(id)),
+    level: facts.levels.includes(saved.level) ? saved.level : 0,
+    count: whole(saved.count, facts.questions), minutes: whole(saved.minutes),
+  };
+}
+
+/** The length and size of a bank's mock exam from its free-form `exam` object; both must be positive whole numbers. */
+export function examProfile(exam: unknown): { minutes: number; count: number } | undefined {
+  if (!isObject(exam)) return undefined;
+  const minutes = exam.duration_minutes;
+  const count = exam.test_question_count;
+  const ok = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) > 0;
+  return ok(minutes) && ok(count) ? { minutes, count } : undefined;
+}
+
+/** How many seen questions have their repeat time come, counted from the states alone; withdrawn ids are left out as in `bankProgress`. */
+export function dueCount(states: Map<number, QuestionState>, now: number, retired: readonly number[] = []): number {
+  let due = 0;
+  for (const [id, state] of states) if (state.lastAt != null && !retired.includes(id) && isDue(state.memory, now)) due++;
+  return due;
+}
+
+const SNIPPET = 120;
+
+/** The question text cut to about `SNIPPET` characters around the first place a word of the query appears. */
+function snippetOf(text: string, words: string[]): string {
+  if (text.length <= SNIPPET) return text;
+  const lower = text.toLocaleLowerCase();
+  const found = words.map((w) => lower.indexOf(w)).filter((i) => i >= 0);
+  const at = found.length ? Math.min(...found) : 0;
+  const start = Math.max(0, Math.min(at - SNIPPET / 4, text.length - SNIPPET));
+  const end = Math.min(text.length, start + SNIPPET);
+  return `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`;
+}
+
+/**
+ * Questions whose text or option text holds every word of the query (a number also finds the question with that id, first).
+ * `text` picks the language, so the search sees what the learner reads.
+ */
+export function findQuestions(questions: Question[], query: string, text: (value: Localized | undefined) => string, limit = 50): { id: number; topic: number; snippet: string }[] {
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+  const words = trimmed.toLocaleLowerCase().split(/\s+/);
+  const byId = /^\d+$/.test(trimmed) ? Number(trimmed) : undefined;
+  const hits: { q: Question; body: string }[] = [];
+  for (const q of questions) {
+    if (q.retired) continue;
+    const body = text(q.question);
+    const options = q.type === "single_choice" || q.type === "multiple_choice" ? q.options.map((o) => text(o.text)) : [];
+    const haystack = [body, ...options].map((x) => x.toLocaleLowerCase());
+    if (q.id === byId || words.every((w) => haystack.some((h) => h.includes(w)))) hits.push({ q, body });
+  }
+  hits.sort((a, b) => Number(b.q.id === byId) - Number(a.q.id === byId));
+  return hits.slice(0, limit).map(({ q, body }) => ({ id: q.id, topic: q.topic_id, snippet: snippetOf(body, words) }));
+}
+
+const BACKUP_EVERY = 14 * 24 * 60 * 60 * 1000;
+const BACKUP_MIN_EVENTS = 50;
+
+/** Whether to remind the learner to save the progress to a file: only on the web page (the apps keep their own data), once there is something worth keeping. */
+export const backupDue = (input: { shell: boolean; events: number; lastBackup: number | undefined; now: number }): boolean => {
+  const { shell, events, lastBackup, now } = input;
+  if (shell || events < BACKUP_MIN_EVENTS) return false;
+  return lastBackup == null || !Number.isFinite(lastBackup) || lastBackup > now || now - lastBackup >= BACKUP_EVERY;
+};
+
+export interface SessionKeyEvent {
+  code: string; key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean;
+  target: { tagName?: string; isContentEditable?: boolean; type?: string } | null; dialogOpen: boolean;
+}
+
+/** Whether the focused element takes typed keys itself: a text field must keep its digits and Enter. */
+function typesText(target: SessionKeyEvent["target"]): boolean {
+  if (!target) return false;
+  const tag = target.tagName?.toUpperCase();
+  if (target.isContentEditable || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return tag === "INPUT" && !["radio", "checkbox"].includes((target.type ?? "").toLowerCase());
+}
+
+/**
+ * What a key does in a session: a digit picks that option, Enter does the main action.
+ * Digits go by the physical key (`code`), because on the Kazakh layout the top row types letters.
+ */
+export function sessionKey(e: SessionKeyEvent, options: number): { pick: number } | "primary" | undefined {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.dialogOpen || typesText(e.target)) return undefined;
+  if (e.code === "Enter" || e.code === "NumpadEnter" || e.key === "Enter") {
+    const tag = e.target?.tagName?.toUpperCase();
+    // A button or link already acts on Enter by itself.
+    return tag === "BUTTON" || tag === "A" ? undefined : "primary";
+  }
+  const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+  const n = digit ? Number(digit[1]) : 0;
+  return n >= 1 && n <= options ? { pick: n - 1 } : undefined;
+}
