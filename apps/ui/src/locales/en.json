@@ -165,7 +165,9 @@
     "allRight": "All answers are correct",
     "again": "Again",
     "fixMistakes": "Retry mistakes ({{n}})",
-    "yourAnswer": "Your answer"
+    "yourAnswer": "Your answer",
+    "notSaved": "Answers not saved",
+    "saveAgain": "Save again"
   },
   "settings": {
     "theme": "Theme",

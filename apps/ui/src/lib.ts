@@ -9,6 +9,13 @@ import type { Localized, Question } from "@exam/schema";
 export const shown = (s: Pick<Session, "config" | "items" | "index">) =>
   s.items.filter((item, i) => s.config.kind === "exam" || item.graded != null || i < s.index);
 
+/**
+ * Ids of the questions the result's "Retry mistakes" asks again and its "Mistakes" line counts: the first showings that were not answered right.
+ * An exam also counts a question left without an answer, as its score does; practice leaves out what was only skipped (see `shown`).
+ */
+export const mistakeIds = (s: Pick<Session, "config" | "items" | "index">): number[] =>
+  shown(s).filter((i) => !i.again && (s.config.kind === "exam" ? !i.graded?.correct : i.graded != null && !i.graded.correct)).map((i) => i.question);
+
 /** The app's own keys in local storage. On a shared origin (a github.io site) any other key belongs to someone else. */
 export const KEYS = { settings: "settings", place: "place", device: "device", exam: "exam", updateCheck: "updateCheck", setup: "setup", backup: "backup" } as const;
 
@@ -187,6 +194,20 @@ export function submitDrafts(s: Session, drafts: Record<number, Draft>, question
  */
 export interface SavedExam { v: 1; session: Session; drafts: Record<number, Draft>; back: string; line?: number; hash: string; pending?: ProgressEvent[] }
 
+/** Where the log write of a finished exam's answers stands, by session id (see `storePending` in `app.tsx`). */
+export type WriteState = "saving" | "saved" | "failed";
+
+/**
+ * What starting `next` does with the exam kept in storage: `flush` when the kept one has ended and its answers may not be in the log yet
+ * (they are written first, and the key goes only once the log has them), `clear` when practice starts over an unfinished kept exam, else `none`.
+ * The same session (every answer calls `run` again) and leaving (`next` is nothing) never touch the key.
+ */
+export function keptOnStart(kept: Pick<SavedExam, "session" | "pending"> | undefined, next: Pick<Session, "id" | "config"> | undefined): "none" | "flush" | "clear" {
+  if (!kept || !next || kept.session.id === next.id) return "none";
+  if (kept.pending) return "flush";
+  return next.config.kind === "exam" ? "none" : "clear";
+}
+
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 const isNumber = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
 const isStrings = (x: unknown) => Array.isArray(x) && x.every((v) => typeof v === "string");
@@ -330,6 +351,22 @@ export const isUpdateDue = (lastCheck: number | undefined, now: number): boolean
  */
 export const isCheckDone = (phase: UpdatePhase): boolean => phase === "latest";
 
+export interface AsyncState<T> { data?: T; error?: unknown }
+export type AsyncStep<T> = { start: true } | { data: T } | { error: unknown };
+
+/**
+ * The state of a load: new data replaces the old; a new load clears an error but keeps the data shown, and a failed one keeps it too,
+ * so a changed key never blanks the screen. Without an error a start gives the same object back, so nothing re-renders.
+ */
+export function stepAsync<T>(now: AsyncState<T>, step: AsyncStep<T>): AsyncState<T> {
+  if ("data" in step) return { data: step.data };
+  if ("error" in step) return { data: now.data, error: step.error };
+  return now.error == null ? now : { data: now.data };
+}
+
+/** Firefox shows a permission prompt when a page asks for persistent storage, so there it is asked at a moment the learner chose. */
+export const isFirefox = (userAgent: string): boolean => /\bFirefox\//.test(userAgent);
+
 /** What the learner chose on a bank's preparation panel. */
 export interface Setup { scope: "smart" | "all" | "mistakes" | "bookmarks"; answerMode: AnswerMode; kind: "practice" | "exam"; topics: number[]; level: number; count: number; minutes: number }
 
@@ -382,6 +419,12 @@ function readSetups(raw: string | null | undefined): [string, Setup][] {
 
 /** The remembered setups by bank id. Never throws; an entry that is not well-formed is dropped. */
 export const parseSetups = (raw: string | null | undefined): Record<string, Setup> => Object.fromEntries(readSetups(raw));
+
+/** The remembered setup of one bank. A bank id that is also a property of every object (`constructor`, `__proto__`) is not a hit unless it was stored. */
+export function setupOf(raw: string | null | undefined, bankId: string): Setup | undefined {
+  const all = parseSetups(raw);
+  return Object.hasOwn(all, bankId) ? all[bankId] : undefined;
+}
 
 /** The setup put last and only the `limit` most recently stored banks kept. */
 export function storeSetup(raw: string | null | undefined, bankId: string, setup: Setup, limit = SETUPS_KEPT): string {
@@ -437,21 +480,53 @@ function snippetOf(text: string, words: string[]): string {
 }
 
 /**
+ * A text without its markdown and TeX marks, for what is shown as plain text: a search result, and the text drawn before the markup chunk arrives.
+ * Careful rather than complete: a mark goes only where the renderer would read it as one, so `snake_case`, `5 * 3`, `$5` and a lone `_` stay.
+ */
+export function plainText(text: string): string {
+  // Code and formulas are set aside first, so marks inside them are not read as markdown; a formula opens and closes like the renderer's rule (no space inside the dollars).
+  const held: string[] = [];
+  const hold = (inner: string) => `${held.push(inner) - 1}`;
+  return text
+    .replace(/```[^\n]*\n?([\s\S]*?)\n?```/g, (_, code: string) => hold(code))
+    .replace(/`([^`\n]+)`/g, (_, code: string) => hold(code))
+    .replace(/\$\$(?!\s)([^$]*[^\s$])\$\$/g, (_, tex: string) => hold(tex))
+    .replace(/\$(?!\s)([^$]*[^\s$])\$/g, (_, tex: string) => hold(tex))
+    .replace(/!?\[([^\]\n]*)\]\([^)\s]*(?:\s+"[^"]*")?\)/g, "$1")
+    .replace(/^ {0,3}#{1,6}[ \t]+/gm, "")
+    // No lookbehind (older Safari fails to parse it): the character before a mark is captured and put back. A mark glued to a word is not one.
+    .replace(/(^|[^\w*])\*\*(?=\S)([^*\n]*[^\s*])\*\*(?![\w*])/g, "$1$2")
+    .replace(/(^|\W)__(?=\S)([^_\n]*[^\s_])__(?!\w)/g, "$1$2")
+    .replace(/(^|[^\w*])\*(?=[^\s*])([^*\n]*[^\s*])\*(?![\w*])/g, "$1$2")
+    .replace(/(^|\W)_(?=[^\s_])([^_\n]*[^\s_])_(?!\w)/g, "$1$2")
+    .replace(/(^|[^\w~])~~(?=\S)([^~\n]*[^\s~])~~(?![\w~])/g, "$1$2")
+    .replace(/(\d+)/g, (_, n: string) => held[Number(n)] ?? "");
+}
+
+/** Whether a query is long enough to search: a number from one digit (a question number runs from 1), anything else from two characters. */
+export const searchable = (query: string): boolean => {
+  const trimmed = query.trim();
+  return /^\d+$/.test(trimmed) || trimmed.length >= 2;
+};
+
+/**
  * Questions whose text or option text holds every word of the query (a number also finds the question with that id, first).
- * `text` picks the language, so the search sees what the learner reads.
+ * `text` picks the language, so the search sees what the learner reads; markdown and TeX marks are left out of what is searched and shown.
+ * A single digit finds only the question with that number: as a word it would match nearly every text.
  */
 export function findQuestions(questions: Question[], query: string, text: (value: Localized | undefined) => string, limit = 50): { id: number; topic: number; snippet: string }[] {
   const trimmed = query.trim();
-  if (trimmed.length < 2) return [];
+  if (!searchable(trimmed)) return [];
   const words = trimmed.toLocaleLowerCase().split(/\s+/);
   const byId = /^\d+$/.test(trimmed) ? Number(trimmed) : undefined;
+  const idOnly = trimmed.length < 2;
   const hits: { q: Question; body: string }[] = [];
   for (const q of questions) {
     if (q.retired) continue;
-    const body = text(q.question);
-    const options = q.type === "single_choice" || q.type === "multiple_choice" ? q.options.map((o) => text(o.text)) : [];
+    const body = plainText(text(q.question));
+    const options = q.type === "single_choice" || q.type === "multiple_choice" ? q.options.map((o) => plainText(text(o.text))) : [];
     const haystack = [body, ...options].map((x) => x.toLocaleLowerCase());
-    if (q.id === byId || words.every((w) => haystack.some((h) => h.includes(w)))) hits.push({ q, body });
+    if (q.id === byId || (!idOnly && words.every((w) => haystack.some((h) => h.includes(w))))) hits.push({ q, body });
   }
   hits.sort((a, b) => Number(b.q.id === byId) - Number(a.q.id === byId));
   return hits.slice(0, limit).map(({ q, body }) => ({ id: q.id, topic: q.topic_id, snippet: snippetOf(body, words) }));
@@ -470,6 +545,8 @@ export const backupDue = (input: { shell: boolean; events: number; lastBackup: n
 export interface SessionKeyEvent {
   code: string; key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean;
   target: { tagName?: string; isContentEditable?: boolean; type?: string } | null; dialogOpen: boolean;
+  /** Set while an input method (IME) composes text: its keys belong to it. */
+  isComposing?: boolean;
 }
 
 /** Whether the focused element takes typed keys itself: a text field must keep its digits and Enter. */
@@ -482,17 +559,18 @@ function typesText(target: SessionKeyEvent["target"]): boolean {
 
 /**
  * What a key does in a session: a digit picks that option, Enter does the main action.
- * Digits go by the physical key (`code`), because on the Kazakh layout the top row types letters.
+ * The top row goes by the physical key (`code`), because on the Kazakh layout it types letters. The numpad needs `key` to be a digit too:
+ * without NumLock the same keys are End, ArrowDown and the like. An input method that is composing keeps its keys (Enter confirms its text).
  */
 export function sessionKey(e: SessionKeyEvent, options: number): { pick: number } | "primary" | undefined {
-  if (e.ctrlKey || e.metaKey || e.altKey || e.dialogOpen || typesText(e.target)) return undefined;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.dialogOpen || e.isComposing === true || e.key === "Process" || typesText(e.target)) return undefined;
   if (e.code === "Enter" || e.code === "NumpadEnter" || e.key === "Enter") {
     const tag = e.target?.tagName?.toUpperCase();
     // A button or link already acts on Enter by itself.
     return tag === "BUTTON" || tag === "A" ? undefined : "primary";
   }
-  const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
-  const n = digit ? Number(digit[1]) : 0;
+  const digit = /^(Digit|Numpad)([1-9])$/.exec(e.code);
+  const n = digit && (digit[1] === "Digit" || /^[0-9]$/.test(e.key)) ? Number(digit[2]) : 0;
   return n >= 1 && n <= options ? { pick: n - 1 } : undefined;
 }
 

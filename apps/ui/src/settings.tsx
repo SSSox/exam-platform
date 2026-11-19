@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Monitor, Moon, Sun } from "lucide-react";
-import { LOCALE_NAMES, THEMES, UI_LOCALES, clearAppData, forgetPlace, loadPlace, markBackup, storageUsed, type Theme } from "./platform.ts";
+import { LOCALE_NAMES, THEMES, UI_LOCALES, clearAppData, forgetPlace, loadPlace, markBackup, persistOnClick, requestPersistence, storageUsed, type Theme } from "./platform.ts";
 import { isProgressEvent } from "./lib.ts";
 import { forgetHome } from "./home.ts";
 import { useApp } from "./app.tsx";
@@ -76,6 +76,8 @@ export function SettingsScreen() {
    * otherwise, or when the dialog cannot be opened, a plain download. Closing the dialog is not an error.
    */
   const save = async () => {
+    // Firefox shows its storage prompt for this call, so it is made here, where the learner has just chosen to keep their progress (see `put` in `app.tsx`).
+    if (persistOnClick()) requestPersistence();
     setMessage("");
     const json = JSON.stringify({ kind: FILE_KIND, events });
     const name = `exam-progress-${new Date().toISOString().slice(0, 10)}.json`;

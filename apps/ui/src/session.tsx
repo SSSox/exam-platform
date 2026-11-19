@@ -7,12 +7,12 @@ import {
   type Graded, type ProgressEvent, type Response, type Session, type SessionItem,
 } from "@exam/core";
 import type { Localized, Question } from "@exam/schema";
-import { clearSavedExam, deviceId, loadSavedExam, saveExam } from "./platform.ts";
+import { clearSavedExam, deviceId, saveExam } from "./platform.ts";
 import { useApp } from "./app.tsx";
 import { Rich } from "./rich.tsx";
 import { Line } from "./line.tsx";
 import { Confirm, useDockHeight } from "./ui.tsx";
-import { STATIONS, buildSession, givenLines, sessionKey, shown, submitDrafts, toggleChoice, unansweredCount, type Draft, type Setup } from "./lib.ts";
+import { STATIONS, buildSession, givenLines, mistakeIds, sessionKey, shown, submitDrafts, toggleChoice, unansweredCount, type Draft, type Setup } from "./lib.ts";
 
 const number = (id: number) => `№ ${String(id).padStart(3, "0")}`;
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
@@ -185,7 +185,7 @@ function Feedback({ q, item, language, bank, attempt }: { q: Question; item: Ses
 
 export function SessionScreen() {
   const { t } = useTranslation();
-  const { running, run, text, fellBack, events, append, commit, settings } = useApp();
+  const { running, run, text, fellBack, events, append, commit, settings, writes, storePending, retryPending, keepExam } = useApp();
   const { session, bundle, back, hash, line } = running!;
   const language = bundle.bank.language;
   const questions = useMemo(() => new Map(bundle.questions.map((q) => [q.id, q])), [bundle]);
@@ -194,8 +194,6 @@ export function SessionScreen() {
   const [drafts, setDrafts] = useState<Record<number, Draft>>(running!.drafts ?? {});
   const [asking, setAsking] = useState(false);
   const [allShown, setAllShown] = useState(false);
-  // A finished exam's answers wait in the kept copy until the log has them; a new session would wipe that copy (see `run`).
-  const [saved, setSaved] = useState(false);
   /** Where the open question puts its own buttons in the bottom bar. */
   const [dock, setDock] = useState<HTMLElement | null>(null);
   const dockBar = useDockHeight();
@@ -220,8 +218,8 @@ export function SessionScreen() {
   const ending = useRef(false);
   /** The exam is kept in local storage from its first shown question to its end, so a reload, a closed window or a restarted app does not lose it. */
   useEffect(() => {
-    if (exam && !done && !ending.current) saveExam({ v: 1, session, drafts, back, line, hash });
-  }, [exam, done, session, drafts, back, line, hash]);
+    if (exam && !done && !ending.current) keepExam({ v: 1, session, drafts, back, line, hash });
+  }, [exam, done, session, drafts, back, line, hash, keepExam]);
   // Walking away from an exam with no answers yet is not held (see holdExam), so it is not kept either: the next launch must not open it again.
   // Only that one: an exam with answers leaves the screen unfinished when the page crashes, and a reload has to bring it back.
   // A reload or a closed app runs no cleanup.
@@ -234,7 +232,8 @@ export function SessionScreen() {
   /**
    * Ends the session. An exam first takes the answers still unsent as its answers, then writes them all to the log. Until the log has them
    * they wait in the kept copy as events (`pending`): a failed write or an app closed at this moment loses nothing, and the next launch
-   * writes the same events, not a second set.
+   * writes the same events, not a second set. The write and its state belong to `Root` (`storePending`), not to this screen, which is
+   * mounted again when the learner goes Back and Forward.
    */
   const end = (s: Session) => {
     if (ending.current) return;
@@ -244,11 +243,7 @@ export function SessionScreen() {
       const indexes = finished.items.flatMap((item, i) => (item.graded ? [i] : []));
       const pending = eventsOf(finished, indexes);
       saveExam({ v: 1, session: s, drafts, back, line, hash, pending });
-      // Only its own copy: by the time the log answers, another exam may have been started and kept.
-      void log(pending, indexes).then((stored) => {
-        if (stored && loadSavedExam()?.session.id === s.id) clearSavedExam();
-        setSaved(stored);
-      });
+      void storePending(s.id, pending);
     }
     set(finished);
   };
@@ -288,7 +283,7 @@ export function SessionScreen() {
     const summary = summarize(session);
     const seen = shown(session);
     const firsts = seen.filter((i) => !i.again);
-    const wrong = firsts.filter((i) => i.graded && !i.graded.correct).map((i) => i.question);
+    const wrong = mistakeIds(session);
     const repeats = seen.length - firsts.length;
     // A long exam is mostly right answers: the review opens on what needs another look, and the rest is one tap away.
     const missed = firsts.filter((i) => !i.graded?.correct);
@@ -307,7 +302,9 @@ export function SessionScreen() {
     };
     const mistakesSetup: Setup = { scope: "all", answerMode: session.config.answerMode, kind: "practice", topics: [], level: 0, count: 0, minutes: 0 };
     const again = running!.setup != null && another(running!.setup) != null;
-    const ready = !exam || saved;
+    // The buttons that start a session wait while the exam's answers are on their way to the log; a failed write does not hold them, starting writes it again (see `run`).
+    const write = exam ? writes[session.id] : undefined;
+    const ready = write !== "saving";
     return (
       <div className="sheet" data-l={running!.line ?? 0}>
         <h1>{t("result.title")}</h1>
@@ -319,6 +316,12 @@ export function SessionScreen() {
           </span>
           <Line count={STATIONS} lit={Math.round((STATIONS * summary.percent) / 100)} />
         </div>
+        {write === "failed" && (
+          <>
+            <p className="hint warn" role="status">{t("result.notSaved")}</p>
+            <div className="actions"><button className="button" onClick={() => retryPending(session.id)}>{t("result.saveAgain")}</button></div>
+          </>
+        )}
         {firsts.length > 0 && (
           <>
             <div className="review-head">
@@ -339,10 +342,11 @@ export function SessionScreen() {
                     <details>
                       <summary>
                         <span className="ticket">{number(q.id)}</span>
-                        <div>
-                          <Rich text={text(q.question, language)} />
-                          <p className="meta">{item.graded ? `${t("session.right")}: ${rightAnswer(q, language).join("; ")}` : t("result.unanswered")}</p>
-                        </div>
+                        {/* A summary holds phrasing content only: spans, and the question in its inline form. */}
+                        <span className="review-q">
+                          <Rich text={text(q.question, language)} inline />
+                          <span className="meta">{item.graded ? `${t("session.right")}: ${rightAnswer(q, language).join("; ")}` : t("result.unanswered")}</span>
+                        </span>
                         {item.graded?.correct ? <Check size={18} strokeWidth={1.5} role="img" aria-label={t("session.correct")} /> : <X size={18} strokeWidth={1.5} role="img" aria-label={item.graded ? t("session.incorrect") : t("result.unanswered")} />}
                         <ChevronDown className="chev" size={18} strokeWidth={1.5} aria-hidden />
                       </summary>
@@ -388,7 +392,7 @@ export function SessionScreen() {
     if (e.repeat) return;
     const act = sessionKey({
       code: e.code, key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey,
-      target: e.target as HTMLInputElement | null, dialogOpen: document.querySelector("dialog[open]") != null,
+      target: e.target as HTMLInputElement | null, dialogOpen: document.querySelector("dialog[open]") != null, isComposing: e.isComposing,
     }, locked ? 0 : order.length);
     if (!act) return;
     // Cancelling the key also stops the browser's own Enter on a focused option from sending the form a second time.

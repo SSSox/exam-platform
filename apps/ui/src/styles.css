@@ -450,7 +450,7 @@ progress.track::-moz-progress-bar { background: var(--c); border-radius: 3px; }
 .review summary { display: grid; grid-template-columns: 64px minmax(0, 1fr) 20px 18px; gap: 12px; align-items: start; min-height: 44px; padding: 14px 16px; border-radius: 18px; list-style: none; cursor: pointer; }
 .review summary::-webkit-details-marker { display: none; }
 .review summary::marker { content: ""; }
-.review summary > div { display: grid; gap: 4px; min-width: 0; }
+.review summary > .review-q { display: grid; gap: 4px; min-width: 0; }
 .review summary:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
 .review summary svg.chev { color: var(--ink-3); transition: transform 160ms var(--out); }
 .review details[open] svg.chev { transform: rotate(180deg); }
@@ -459,7 +459,7 @@ progress.track::-moz-progress-bar { background: var(--c); border-radius: 3px; }
 /* On a phone the number takes its own line with the marks, and the question gets the whole width. */
 @media (max-width: 480px) {
   .review summary { grid-template-columns: minmax(0, 1fr) 20px 18px; gap: 8px 12px; }
-  .review summary > div { grid-column: 1 / -1; grid-row: 2; }
+  .review summary > .review-q { grid-column: 1 / -1; grid-row: 2; }
 }
 .review-more { display: grid; gap: 12px; padding: 0 16px 16px; overflow-wrap: anywhere; }
 .review-more > * { min-width: 0; }

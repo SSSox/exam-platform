@@ -57,21 +57,28 @@ export function attemptEvent(s: Session, item: SessionItem, q: Question, at: num
 
 export interface ExamResult { session: string; at: number; correct: number; of: number; percent: number }
 
-/** Mock exams of a bank, newest first, from the log. An answer the learner disputed does not count as right, as in `project()`. */
+/**
+ * Mock exams of a bank, newest first, from the log. An answer the learner disputed does not count as right, as in `project()`.
+ * `correct` is a count of right answers, `percent` is the share of points (`score`), as the result screen's `summarize` has it: a partly right answer is part of a point.
+ */
 export function examHistory(events: ProgressEvent[], bank: string): ExamResult[] {
   const own = events.filter((e) => e.bank === bank);
   const disputed = new Set(own.flatMap((e) => (e.type === "dispute" ? [e.attempt] : [])));
-  const bySession = new Map<string, { at: number; correct: number; of: number }>();
+  const bySession = new Map<string, { at: number; correct: number; points: number; of: number }>();
   for (const e of own) {
     // A log from outside can carry the marker without a usable size; such an exam cannot be scored.
     if (e.type !== "attempt" || e.exam !== true || !Number.isSafeInteger(e.of) || e.of! <= 0) continue;
-    const exam = bySession.get(e.session) ?? { at: e.at, correct: 0, of: e.of! };
+    const exam = bySession.get(e.session) ?? { at: e.at, correct: 0, points: 0, of: e.of! };
     exam.at = Math.max(exam.at, e.at);
-    if (e.correct && !disputed.has(e.id)) exam.correct++;
+    if (!disputed.has(e.id)) {
+      if (e.correct) exam.correct++;
+      // An old or foreign event without a score is worth what its verdict says.
+      exam.points += Number.isFinite(e.score) ? e.score : e.correct ? 1 : 0;
+    }
     bySession.set(e.session, exam);
   }
   return [...bySession]
-    .map(([session, x]) => ({ session, ...x, percent: Math.round((100 * Math.min(x.correct, x.of)) / x.of) }))
+    .map(([session, { points, ...x }]) => ({ session, ...x, percent: Math.round((100 * Math.min(points, x.of)) / x.of) }))
     .sort((a, b) => b.at - a.at || (a.session < b.session ? -1 : 1));
 }
 

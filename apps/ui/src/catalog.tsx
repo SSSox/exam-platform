@@ -7,6 +7,7 @@ import { Status, useApp, useAsync } from "./app.tsx";
 import { Line } from "./line.tsx";
 import { forgetHome, rememberHome } from "./home.ts";
 import { Stops, stopsOf } from "./stops.tsx";
+import { useMinute } from "./ui.tsx";
 import { DownloadLine } from "./downloads.tsx";
 import { UpdateLine } from "./updates.tsx";
 import { STATIONS, backupDue, bankProgress, changeTarget, dueCount, homeOf, lineOf, namesLine, pathNames, sharedKind, shortTitle, stationsOf, type Station } from "./lib.ts";
@@ -133,6 +134,8 @@ function Rows({ entries, node }: { entries: Entry[]; node?: NodeManifest }) {
   const { t } = useTranslation();
   const { text, events } = useApp();
   const group = node ? text(node.title) : "";
+  // The count due for review depends on the clock, so a page left open recounts once a minute, as the bank page does.
+  const minute = useMinute();
 
   const progress = useMemo(() => {
     const now = Date.now();
@@ -142,7 +145,7 @@ function Rows({ entries, node }: { entries: Entry[]; node?: NodeManifest }) {
       const states = project(events, e.ref.id);
       return [[e.ref.id, { ...bankProgress(states, e.ref.questions, now, e.ref.retired), due: dueCount(states, now, e.ref.retired) }] as const];
     }));
-  }, [entries, events]);
+  }, [entries, events, minute]);
 
   // What a folder holds, as a hint under its name. Skipped for long lists: each folder is one more request.
   const peek = useAsync(async (): Promise<Record<string, NodeManifest>> => {

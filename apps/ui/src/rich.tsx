@@ -1,8 +1,9 @@
 import { memo, useEffect, useMemo, useSyncExternalStore } from "react";
 import { needsMath } from "./formula.ts";
+import { plainText } from "./lib.ts";
 import type { MathFn } from "./render.ts";
 
-// The markdown renderer (markdown-it, DOMPurify) and KaTeX are lazy chunks. Until they arrive a text is shown raw, as a React text node
+// The markdown renderer (markdown-it, DOMPurify) and KaTeX are lazy chunks. Until they arrive a text is shown without its marks (`plainText`), as a React text node
 // (never through innerHTML), and every mounted Rich re-renders when the store below changes.
 type Render = typeof import("./render.ts").renderRich;
 let render: Render | undefined;
@@ -43,5 +44,6 @@ export const Rich = memo(function Rich({ text, inline = false }: { text: string;
   const ready = render !== undefined && (!math || formula !== undefined);
   const html = useMemo(() => ready ? render!(text, inline, formula) : "", [ready, text, inline]);
   const Tag = inline ? "span" : "div";
-  return ready ? <Tag className="rich" dangerouslySetInnerHTML={{ __html: html }} /> : <Tag className="rich">{text}</Tag>;
+  // Not ready (the chunk is on its way, or it or the formulas failed to load): the text without its marks, as a text node.
+  return ready ? <Tag className="rich" dangerouslySetInnerHTML={{ __html: html }} /> : <Tag className="rich">{plainText(text)}</Tag>;
 });

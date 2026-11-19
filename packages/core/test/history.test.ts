@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { Question } from "@exam/schema";
-import { attemptEvent, createSession, examHistory, finish, project, submit, type AttemptEvent, type ProgressEvent, type SessionConfig } from "../src/index.ts";
+import { attemptEvent, createSession, examHistory, finish, goTo, project, submit, summarize, type AttemptEvent, type ProgressEvent, type SessionConfig } from "../src/index.ts";
 
 const choice = (id: number) => Question.parse({
   id, topic_id: 1, type: "single_choice", question: `Q${id}`,
@@ -60,6 +60,30 @@ describe("exam history", () => {
   test("a disputed answer does not count as right", () => {
     const log: ProgressEvent[] = [ev("a", "s", 1, true), ev("b", "s", 2, true), { id: "x", type: "dispute", at: 3, device: "d", bank: "b", question: 1, attempt: "a" }];
     expect(examHistory(log, "b")[0]).toMatchObject({ correct: 1, percent: 25 });
+  });
+
+  test("the percent follows the points, as the result screen's summary does; the count stays the right answers", () => {
+    // Four questions: one right, one half right (not "correct"), two unanswered.
+    const log: ProgressEvent[] = [ev("a", "s", 1, true), ev("b", "s", 2, false, { score: 0.5 })];
+    expect(examHistory(log, "b")[0]).toMatchObject({ correct: 1, of: 4, percent: 38 });
+  });
+
+  test("the percent equals summarize() of the same session, with partial credit", () => {
+    const multi = Question.parse({
+      id: 1, topic_id: 1, type: "multiple_choice", question: "Q",
+      options: [{ id: "A", text: "a" }, { id: "B", text: "b" }, { id: "C", text: "c" }], correct_answers: ["A", "B"],
+    });
+    const all = [multi, choice(2), choice(3), choice(4)];
+    let s = createSession("b", all, { ...base, kind: "exam" }, 0, "s1");
+    // One of two right options and nothing wrong is half a point under partial scoring; one more is right, two are left unanswered.
+    s = submit(s, all[0]!, { mode: "choice", selected: ["A"] }, 10, { scoring: "partial" });
+    s = submit(goTo(s, 1, 11), all[1]!, { mode: "choice", selected: ["A"] }, 12, { scoring: "partial" });
+    s = finish(s, 20);
+    expect(s.items[0]!.graded).toMatchObject({ correct: false, score: 0.5 });
+    const events = s.items.flatMap((item, i) => (item.graded ? [attemptEvent(s, item, all[i]!, 100 + i, "d", "ru", `e${i}`)] : []));
+    // 1.5 points of 4: 38, where counting right answers alone would say 25.
+    expect(summarize(s).percent).toBe(38);
+    expect(examHistory(events, "b")[0]).toMatchObject({ correct: 1, of: 4, percent: summarize(s).percent });
   });
 
   test("an exam without a valid size is skipped", () => {

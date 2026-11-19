@@ -169,7 +169,9 @@
     "allRight": "Все ответы верные",
     "again": "Ещё раз",
     "fixMistakes": "Повторить ошибки ({{n}})",
-    "yourAnswer": "Ваш ответ"
+    "yourAnswer": "Ваш ответ",
+    "notSaved": "Ответы не записаны",
+    "saveAgain": "Записать ещё раз"
   },
   "settings": {
     "theme": "Тема",

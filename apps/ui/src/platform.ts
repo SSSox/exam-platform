@@ -1,6 +1,6 @@
 import Dexie from "dexie";
 import { ContentClient, uuidv7, type Http, type KeyValue, type ProgressEvent } from "@exam/core";
-import { KEYS, isShell, parseSavedExam, parseSetups, pinnedBanks, storeSetup, wipe, type SavedExam, type Setup } from "./lib.ts";
+import { KEYS, isFirefox, isShell, parseSavedExam, pinnedBanks, setupOf, storeSetup, wipe, type SavedExam, type Setup } from "./lib.ts";
 
 const db = new Dexie("exam-platform");
 db.version(1).stores({ kv: "", events: "id" });
@@ -40,6 +40,21 @@ export const loadEvents = (): Promise<ProgressEvent[]> => db.table("events").toA
 export const saveEvents = (events: ProgressEvent[]) => db.table("events").bulkPut(events);
 /** Everything the app stored: the log, the downloaded banks, settings and the remembered place. The caller reloads the page, so nothing held in memory writes it back. */
 export const clearAppData = () => wipe([db.table("kv"), db.table("events")], localStorage);
+
+/** Firefox asks the learner for permission when the page requests persistent storage, so there the request waits for a deliberate click (see `settings.tsx`). */
+export const persistOnClick = (): boolean => isFirefox(navigator.userAgent);
+
+let persistAsked = false;
+/** Asks the browser, once per launch, not to clear the log under storage pressure. The apps keep their data themselves. */
+export function requestPersistence(): void {
+  if (persistAsked || inShell()) return;
+  persistAsked = true;
+  try {
+    void navigator.storage?.persist?.().catch(() => {});
+  } catch {
+    // an unsupported browser keeps the log as before
+  }
+}
 
 /** Bytes the page's storage takes on the device, where the browser can tell. */
 export const storageUsed = async (): Promise<number | undefined> => (await navigator.storage?.estimate?.())?.usage;
@@ -144,7 +159,7 @@ export function forgetPlace(): void {
 /** The setup remembered for a bank, as stored (it is fitted to the bank by `fitSetup`). Unreadable storage means nothing is remembered. */
 export function loadSetup(bank: string): Setup | undefined {
   try {
-    return parseSetups(localStorage.getItem(KEYS.setup))[bank];
+    return setupOf(localStorage.getItem(KEYS.setup), bank);
   } catch {
     return undefined;
   }

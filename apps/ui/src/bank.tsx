@@ -7,11 +7,11 @@ import { client, deviceId, loadSetup, rememberSetup, storePlace } from "./platfo
 import { Status, useApp, useAsync } from "./app.tsx";
 import { hashOf, load } from "./catalog.tsx";
 import { rememberHome } from "./home.ts";
-import { Segmented, Select, SideSheet, useDockHeight, useWide } from "./ui.tsx";
+import { Segmented, Select, SideSheet, useDockHeight, useMinute, useWide } from "./ui.tsx";
 import { Peek } from "./peek.tsx";
 import { STATUSES, StatusMark } from "./status.tsx";
 import { Stops, stopsOf } from "./stops.tsx";
-import { buildSession, examProfile, findQuestions, fitSetup, homeOf, lineOf, pageAbove, pathNames, stationsOf, type Setup } from "./lib.ts";
+import { buildSession, examProfile, findQuestions, fitSetup, homeOf, lineOf, pageAbove, pathNames, searchable, stationsOf, type Setup } from "./lib.ts";
 
 type Filter = QuestionStatus | "due" | null;
 type Scope = "smart" | "all" | "mistakes" | "bookmarks";
@@ -73,7 +73,7 @@ function Cells({ questions, label, status, due, filter, onOpen }: {
 
 export function BankScreen({ node, bank: bankId }: { node: string; bank: string }) {
   const { t } = useTranslation();
-  const { index, events, logReady, text, settings, run, append } = useApp();
+  const { index, events, logReady, logRead, text, settings, run, append } = useApp();
   const loaded = useAsync(async () => {
     const chain = await walk(index!.roots, node, load);
     const folder = chain.at(-1);
@@ -108,6 +108,7 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
   // True while the bank has no remembered setup: its first switch to the exam takes the exam's own size.
   const fresh = useRef(false);
   const lastStored = useRef("");
+  const fittedBlind = useRef(false);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const dockBar = useDockHeight();
@@ -122,11 +123,7 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
   const [expanded, setExpanded] = useState<number[]>([]);
 
   // Which questions are due depends on the clock, so a page left open recounts once a minute.
-  const [minute, setMinute] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => setMinute((n) => n + 1), 60_000);
-    return () => clearInterval(timer);
-  }, []);
+  const minute = useMinute();
 
   const view = useMemo(() => {
     if (!loaded.data) return undefined;
@@ -136,18 +133,19 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
     return { states, now, stats: bankStats(states, questions, now), active: questions.filter((q) => !q.retired) };
   }, [loaded.data, events, minute]);
   const found = useMemo(
-    () => (view && deferredQuery.trim().length >= 2 ? findQuestions(view.active, deferredQuery, (v) => text(v, loaded.data?.bundle.bank.language)) : undefined),
+    () => (view && searchable(deferredQuery) ? findQuestions(view.active, deferredQuery, (v) => text(v, loaded.data?.bundle.bank.language)) : undefined),
     [view, deferredQuery, text, loaded.data],
   );
   const bankKey = loaded.data?.bundle.bank.id;
   useEffect(() => {
-    if (!bankKey || fitted !== bankKey) return;
+    // Nothing is remembered until the log was really read: the panel was fitted to an empty one, and its "smart" would replace a saved "mistakes".
+    if (!bankKey || fitted !== bankKey || !logRead || fittedBlind.current) return;
     const setup: Setup = { scope, answerMode, kind, topics, level, count, minutes };
     const json = JSON.stringify(setup);
     if (json === lastStored.current) return;
     lastStored.current = json;
     rememberSetup(bankKey, setup);
-  }, [bankKey, fitted, scope, answerMode, kind, topics, level, count, minutes]);
+  }, [bankKey, fitted, logRead, scope, answerMode, kind, topics, level, count, minutes]);
 
   // The remembered setup is fitted to the bank as it is now, which needs the log: it says whether any mistakes or bookmarks are left.
   if (!loaded.data || !view || !logReady) return <Status error={loaded.error} reload={loaded.reload} />;
@@ -160,6 +158,8 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
     const saved = loadSetup(bank.id);
     const own = fitSetup(saved, { topicIds: bank.topics.map((tp) => tp.id), levels: bank.difficulty_scale?.map((s) => s.level) ?? [], mistakes: stats.mistakes.length, bookmarks: stats.bookmarks.length, questions: ref.questions });
     fresh.current = !saved;
+    // Fitted to a log that was not read: even once it arrives, this panel's choice must not replace the remembered one.
+    fittedBlind.current = !logRead;
     lastStored.current = JSON.stringify(own);
     setScope(own.scope);
     setAnswerMode(own.answerMode);

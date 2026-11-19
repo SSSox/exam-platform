@@ -9,6 +9,16 @@ export function useBackClose(close: () => void): void {
   useEffect(() => takeBack(() => latest.current()), []);
 }
 
+/** A number that grows once a minute: what depends on the clock (which questions are due) lists it in its dependencies to be counted again. */
+export function useMinute(): number {
+  const [minute, setMinute] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setMinute((n) => n + 1), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  return minute;
+}
+
 const WIDE = "(min-width: 960px)";
 const watchWide = (notify: () => void) => {
   const query = matchMedia(WIDE);

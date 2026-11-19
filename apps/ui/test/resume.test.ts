@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import katex from "katex";
 import type { Session, SessionItem } from "@exam/core";
 import {
-  KEYS, draftResponse, fitsBundle, parseSavedExam, pinnedBanks, safeStyle, settleDrafts, unansweredCount, wipe, type SavedExam,
+  KEYS, draftResponse, fitsBundle, keptOnStart, parseSavedExam, pinnedBanks, safeStyle, settleDrafts, unansweredCount, wipe, type SavedExam,
 } from "../src/lib.ts";
 
 const T0 = 1_700_000_000_000;
@@ -64,6 +64,28 @@ describe("a saved exam", () => {
     expect(fitsBundle(exam(), bundle("b1", [1, 2, 3, 4]))).toBe(true);
     expect(fitsBundle(exam(), bundle("b1", [1, 2]))).toBe(false);
     expect(fitsBundle(exam(), bundle("other", [1, 2, 3]))).toBe(false);
+  });
+});
+
+describe("what starting a session does with the kept exam", () => {
+  const pending = [{ id: "e1", type: "attempt" as const, at: T0, bank: "b1", question: 1, correct: true, mode: "choice" as const }] as unknown as SavedExam["pending"];
+  const practice = { id: "p1", config: { kind: "practice" } } as Pick<Session, "id" | "config">;
+  const another = { id: "s2", config: { kind: "exam" } } as Pick<Session, "id" | "config">;
+  test("nothing kept, or nothing started (leaving), touches nothing", () => {
+    expect(keptOnStart(undefined, practice)).toBe("none");
+    expect(keptOnStart(saved({ pending }), undefined)).toBe("none");
+  });
+  test("a finished exam whose answers may not be in the log is written first, whatever starts", () => {
+    expect(keptOnStart(saved({ pending }), practice)).toBe("flush");
+    expect(keptOnStart(saved({ pending }), another)).toBe("flush");
+  });
+  test("the same session never touches its own key (every answer runs again)", () => {
+    expect(keptOnStart(saved({ pending }), { id: "s1", config: { kind: "exam" } } as Pick<Session, "id" | "config">)).toBe("none");
+    expect(keptOnStart(saved(), { id: "s1", config: { kind: "exam" } } as Pick<Session, "id" | "config">)).toBe("none");
+  });
+  test("practice drops an unfinished kept exam; another exam is left for its own copy to replace", () => {
+    expect(keptOnStart(saved(), practice)).toBe("clear");
+    expect(keptOnStart(saved(), another)).toBe("none");
   });
 });
 

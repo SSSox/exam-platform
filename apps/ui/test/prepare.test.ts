@@ -1,7 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { Question } from "@exam/schema";
 import { attemptEvent, createSession, finish, isDue, learn, project, submit, type ProgressEvent, type QuestionState } from "@exam/core";
-import { KEYS, backupDue, buildSession, dueCount, examProfile, findQuestions, fitSetup, isProgressEvent, parseSetups, sessionKey, storeSetup, toggleChoice, givenLines, type Setup } from "../src/lib.ts";
+import {
+  KEYS, backupDue, buildSession, dueCount, examProfile, findQuestions, fitSetup, isFirefox, isProgressEvent, mistakeIds, parseSetups, plainText as stripped, searchable, sessionKey, setupOf,
+  stepAsync, storeSetup, toggleChoice, givenLines, type Setup,
+} from "../src/lib.ts";
 
 const q = (data: unknown) => Question.parse(data);
 const choice = (id: number, topic: number, extra: object = {}) => q({
@@ -188,6 +191,20 @@ describe("findQuestions", () => {
     expect(ids("а")).toEqual([]);
     expect(ids("  ")).toEqual([]);
   });
+  test("a number is searched from one digit, text from two characters", () => {
+    expect(searchable("5")).toBe(true);
+    expect(searchable(" 12 ")).toBe(true);
+    expect(searchable("а")).toBe(false);
+    expect(searchable("a5")).toBe(true);
+    expect(searchable("5 ")).toBe(true);
+    expect(searchable("")).toBe(false);
+  });
+  test("a result shows the text without markdown and TeX marks, and the search sees it too", () => {
+    const marked = [choice(1, 1, { question: "Найдите **значение** $x^2$ в [таблице](t.png)" })];
+    expect(findQuestions(marked, "значение", plainText)[0]!.snippet).toBe("Найдите значение x^2 в таблице");
+    expect(findQuestions(marked, "x^2 в таблице", plainText).map((r) => r.id)).toEqual([1]);
+    expect(findQuestions(marked, "**", plainText)).toEqual([]);
+  });
   test("case-insensitive, Cyrillic and Kazakh letters", () => {
     expect(ids("СТОЛИЦА")).toEqual([3]);
     expect(ids("әлемдегі")).toEqual([1]);
@@ -207,7 +224,9 @@ describe("findQuestions", () => {
   test("a number finds the question with that id first, and retired are skipped", () => {
     expect(ids("12")).toEqual([12]);
     const withNumber = [choice(5, 1), q({ id: 9, topic_id: 1, type: "single_choice", question: "Chapter 5 text", options: [{ id: "A", text: "a" }, { id: "B", text: "b" }], correct_answers: ["A"] })];
-    expect(findQuestions(withNumber, "5", plainText)).toEqual([]);
+    // One digit is a question number only: as a word it would match every text that mentions it.
+    expect(findQuestions(withNumber, "5", plainText).map((r) => r.id)).toEqual([5]);
+    expect(findQuestions(withNumber, "7", plainText)).toEqual([]);
     const many = [...withNumber, choice(55, 1, { question: "see 55 here" })];
     expect(findQuestions(many, "55", plainText).map((r) => r.id)).toEqual([55]);
     expect(ids("7")).toEqual([]);
@@ -242,6 +261,78 @@ describe("findQuestions", () => {
   });
 });
 
+describe("plainText", () => {
+  test("marks the renderer would read are removed", () => {
+    expect(stripped("$x^2$")).toBe("x^2");
+    expect(stripped("$$\\frac{a}{b}$$ и $a_1 + b_2$")).toBe("\\frac{a}{b} и a_1 + b_2");
+    expect(stripped("**жирный** и __тоже__")).toBe("жирный и тоже");
+    expect(stripped("*курсив* и _тоже_")).toBe("курсив и тоже");
+    expect(stripped("~~вычеркнуто~~")).toBe("вычеркнуто");
+    expect(stripped("[a](b) и ![рисунок](p.png) и [c](d \"title\")")).toBe("a и рисунок и c");
+    expect(stripped("# Заголовок\n### Ещё")).toBe("Заголовок\nЕщё");
+    expect(stripped("вызов `f(**x)` и ```py\nprint(1)\n```")).toBe("вызов f(**x) и print(1)");
+  });
+  test("ordinary text is left alone", () => {
+    for (const text of ["snake_case и file_name_here", "a_b_c", "_", "*", "5 * 3", "2*3*4", "цена $5", "$5 и $6", "а $5, б $ 6", "a * b * c", "100%", "C# и #хэштег", "__init__.py", "x_1 и y_2"]) {
+      expect(stripped(text), text).toBe(text === "__init__.py" ? "init.py" : text);
+    }
+  });
+  test("marks inside code and formulas are not read as markdown", () => {
+    expect(stripped("`a_b_c` $x_1*y*z$ `**`")).toBe("a_b_c x_1*y*z **");
+  });
+});
+
+describe("mistakes of a result", () => {
+  const item = (question: number, graded?: boolean, again?: number) => ({ question, mode: "choice" as const, ...(again ? { again } : {}), ...(graded == null ? {} : { graded: { correct: graded, score: graded ? 1 : 0 } }) });
+  const session = (kind: "exam" | "practice", items: ReturnType<typeof item>[], index: number) => ({
+    id: "s", bank: "b", index, startedAt: 0, shownAt: 0, items, config: { kind, answerMode: "choice", unsupported: "skip", shuffle: false, seed: 1 },
+  }) as unknown as Parameters<typeof mistakeIds>[0];
+  test("an exam counts the wrong answers and the unanswered questions", () => {
+    expect(mistakeIds(session("exam", [item(1, true), item(2, false), item(3), item(4, false)], 3))).toEqual([2, 3, 4]);
+  });
+  test("practice counts only what was answered wrong; repeats are not first showings", () => {
+    expect(mistakeIds(session("practice", [item(1, false), item(2), item(3, true), item(4), item(1, false, 1)], 3))).toEqual([1]);
+  });
+});
+
+describe("setupOf", () => {
+  const good = { scope: "all", answerMode: "choice", kind: "practice", topics: [], level: 0, count: 5, minutes: 10 };
+  test("finds a stored bank", () => {
+    expect(setupOf(JSON.stringify([["a", good]]), "a")).toEqual(good);
+  });
+  test("a bank id that names an inherited property finds nothing", () => {
+    const raw = JSON.stringify([["a", good]]);
+    for (const id of ["constructor", "__proto__", "toString", "hasOwnProperty", "valueOf"]) expect(setupOf(raw, id), id).toBeUndefined();
+    expect(setupOf(null, "constructor")).toBeUndefined();
+  });
+  test("a bank stored under such an id is still its own", () => {
+    expect(setupOf(JSON.stringify([["constructor", good]]), "constructor")).toEqual(good);
+  });
+});
+
+describe("stepAsync", () => {
+  test("new data replaces the old and clears an error", () => {
+    expect(stepAsync({ data: 1, error: "x" }, { data: 2 })).toEqual({ data: 2 });
+  });
+  test("a failure keeps the data that was shown", () => {
+    expect(stepAsync({ data: 1 }, { error: "x" })).toEqual({ data: 1, error: "x" });
+  });
+  test("a new load clears the error but keeps the data; without an error it changes nothing", () => {
+    expect(stepAsync({ data: 1, error: "x" }, { start: true })).toEqual({ data: 1 });
+    const same = { data: 1 };
+    expect(stepAsync(same, { start: true })).toBe(same);
+  });
+});
+
+describe("isFirefox", () => {
+  test("by the Firefox token of the user agent", () => {
+    expect(isFirefox("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0")).toBe(true);
+    expect(isFirefox("Mozilla/5.0 (Android 14; Mobile; rv:125.0) Gecko/125.0 Firefox/125.0")).toBe(true);
+    expect(isFirefox("Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36")).toBe(false);
+    expect(isFirefox("Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/125.0 Mobile/15E148")).toBe(false);
+  });
+});
+
 describe("backupDue", () => {
   const DAY = 86_400_000;
   const base = { shell: false, events: 50, lastBackup: undefined as number | undefined, now: T0 };
@@ -273,6 +364,21 @@ describe("sessionKey", () => {
   });
   test("on the Kazakh layout the key types a letter but the code still picks", () => {
     expect(sessionKey(key({ code: "Digit2", key: "ә" }), 3)).toEqual({ pick: 1 });
+  });
+  test("the numpad picks only while it types digits (NumLock on)", () => {
+    expect(sessionKey(key({ code: "Numpad2", key: "2" }), 4)).toEqual({ pick: 1 });
+    for (const [code, name] of [["Numpad1", "End"], ["Numpad2", "ArrowDown"], ["Numpad3", "PageDown"], ["Numpad4", "ArrowLeft"], ["Numpad5", "Clear"], ["Numpad7", "Home"], ["Numpad9", "PageUp"]]) {
+      expect(sessionKey(key({ code, key: name }), 9), code).toBeUndefined();
+    }
+    // The top row is still by the code, whatever it types.
+    expect(sessionKey(key({ code: "Digit1", key: "ә" }), 4)).toEqual({ pick: 0 });
+  });
+  test("a key pressed to an input method belongs to it", () => {
+    expect(sessionKey(key({ isComposing: true }), 4)).toBeUndefined();
+    expect(sessionKey(key({ key: "Process" }), 4)).toBeUndefined();
+    expect(sessionKey(key({ code: "Enter", key: "Enter", isComposing: true }), 4)).toBeUndefined();
+    expect(sessionKey(key({ code: "Enter", key: "Process" }), 4)).toBeUndefined();
+    expect(sessionKey(key({ isComposing: false }), 4)).toEqual({ pick: 0 });
   });
   test("Enter is the primary action", () => {
     expect(sessionKey(key({ code: "Enter", key: "Enter" }), 3)).toBe("primary");
