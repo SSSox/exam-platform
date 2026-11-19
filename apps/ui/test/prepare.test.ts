@@ -136,7 +136,7 @@ describe("exam by levels", () => {
 
   test("a level listed twice counts once with both numbers, so the exam keeps its full size", () => {
     const base = { duration_minutes: 90, test_question_count: 40 };
-    const twice = examProfile({ ...base, official_levels: [{ level: 1, per_test: 16 }, { level: 2, per_test: 20 }, { level: 1, per_test: 4 }] });
+    const twice = examProfile({ ...base, official_levels: [{ level: 2, per_test: 20 }, { level: 1, per_test: 16 }, { level: 1, per_test: 4 }] });
     expect(twice?.levels).toEqual([{ level: 1, count: 20 }, { level: 2, count: 20 }]);
     // A stored setup with a repeated level is not taken as shares.
     const stored = { scope: "all", answerMode: "choice", kind: "exam", topics: [], level: 0, count: 5, minutes: 10, levels: [{ level: 1, count: 2 }, { level: 1, count: 3 }] };

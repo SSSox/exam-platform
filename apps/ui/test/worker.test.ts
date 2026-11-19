@@ -232,3 +232,33 @@ describe("shellVersion", () => {
     expect(shellVersion(LIST, "a")).not.toBe(shellVersion(LIST, "b"));
   });
 });
+
+describe("a copy at the root of the site", () => {
+  const ROOT = "https://u.github.io/";
+  it("takes an activate message from its own page only, not from a copy in a folder under it", async () => {
+    const worker = boot("v1", fakeCaches(), netFor(PAGE_HTML(), ROOT), ROOT);
+    await worker.run("install");
+    const send = (url: string) => worker.handlers.get("message")!({ data: { type: "activate" }, source: { url } });
+    send(ROOT + "app/#/session");
+    send(ROOT + "app/index.html");
+    send("not a url");
+    expect(worker.skipped).toEqual([]);
+    send(ROOT + "?sw#/session");
+    send(ROOT + "index.html");
+    expect(worker.skipped).toEqual([1, 1]);
+  });
+
+  it("keeps the old unscoped cache of a copy in a folder under it, deletes its own and an empty one", async () => {
+    const caches = fakeCaches();
+    await (await caches.open("exam-trainer-shell-aaaaaaaaaaaa")).put(ROOT, new Response("own old page"));
+    await (await caches.open("exam-trainer-shell-bbbbbbbbbbbb")).put(ROOT + "app/", new Response("nested copy page"));
+    await caches.open("exam-trainer-shell-cccccccccccc");
+    const worker = boot("v2", caches, netFor(PAGE_HTML(), ROOT), ROOT);
+    await worker.run("install");
+    await worker.run("activate");
+    const left = [...caches.stores.keys()];
+    expect(left).toContain("exam-trainer-shell-bbbbbbbbbbbb");
+    expect(left).not.toContain("exam-trainer-shell-aaaaaaaaaaaa");
+    expect(left).not.toContain("exam-trainer-shell-cccccccccccc");
+  });
+});

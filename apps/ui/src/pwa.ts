@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { isShell } from "./lib.ts";
+import { KEYS, isShell } from "./lib.ts";
 
 /**
  * Whether to register the offline worker. Only in a production build, where the browser has workers, outside the Windows and Android
@@ -43,11 +43,13 @@ function watch(reg: ServiceWorkerRegistration): void {
 }
 
 /**
- * Whether a failed lazy chunk should reload the page: not when the page already reloaded for this a moment ago (a loop),
- * and not offline, where the chunk is missing for want of a network and a reload could only show the browser's offline page.
+ * Whether a failed lazy chunk should reload the page: not when the page already reloaded for this a moment ago (a loop); not offline,
+ * where the chunk is missing for want of a network (the reload would give the cached page at best, the browser's offline page at
+ * worst); and not during practice, which lives only in memory: the lazy chunks only format text, and without them it stays plain.
+ * A running exam is kept in storage and comes back after the reload.
  */
-export function reloadAllowed(last: number | null, now: number, online = true, span = 10_000): boolean {
-  return online && (last == null || !Number.isFinite(last) || now - last >= span || now < last);
+export function reloadAllowed(last: number | null, now: number, online = true, practice = false, span = 10_000): boolean {
+  return online && !practice && (last == null || !Number.isFinite(last) || now - last >= span || now < last);
 }
 
 /**
@@ -57,7 +59,8 @@ export function reloadAllowed(last: number | null, now: number, online = true, s
 export function reloadOnChunkError(event: Event): void {
   try {
     const raw = sessionStorage.getItem(CHUNK_RELOAD);
-    if (!reloadAllowed(raw == null ? null : Number(raw), Date.now(), navigator.onLine !== false)) return;
+    const practice = location.hash.startsWith("#/session") && localStorage.getItem(KEYS.exam) == null;
+    if (!reloadAllowed(raw == null ? null : Number(raw), Date.now(), navigator.onLine !== false, practice)) return;
     sessionStorage.setItem(CHUNK_RELOAD, String(Date.now()));
   } catch {
     return; // without storage a loop could not be stopped

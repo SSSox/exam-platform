@@ -16,7 +16,7 @@ import { SettingsScreen } from "./settings.tsx";
 import { Confirm, Select } from "./ui.tsx";
 import { useHome } from "./home.ts";
 import { takeBack } from "./back.ts";
-import { fitsBundle, holdExam, keptOnStart, showContent, stepAsync, writePending, type ContentShown, type Draft, type Setup, type WriteState } from "./lib.ts";
+import { LEFTOVERS, fitsBundle, holdExam, keptOnStart, sharedRun, showContent, stepAsync, writePending, type ContentShown, type Draft, type Setup, type WriteState } from "./lib.ts";
 
 const initial = loadSettings();
 /** Sets the theme before the first paint; the effect in Root takes over and stops this one's system listener. */
@@ -165,8 +165,7 @@ export function Root() {
   // An exam that was open when the app closed or the page reloaded comes back as it was left: the clock kept running, so one that has run out ends at once.
   useEffect(() => {
     // Answers of earlier exams whose write never got through (their exam key was taken by a newer exam since) are written now.
-    const left = loadUnwritten();
-    if (left.length) void commit(left).then((stored) => stored && dropWritten(left));
+    flushLeftovers.current();
     const saved = loadSavedExam();
     if (!saved) return;
     // It had ended, and whether the log got its answers is not known: they are written again (the same events, so nothing doubles), the exam is not reopened.
@@ -236,6 +235,7 @@ export function Root() {
    * Adds events to the log; returns how many were new (an imported file may repeat known ones).
    * The screen takes them at once; when the device cannot store them, the learner is told and the answers stay until the app closes.
    */
+  const flushLeftovers = useRef(() => {});
   const put = useCallback(async (added: ProgressEvent[]) => {
     const before = latest.current.events;
     const merged = mergeLogs(before, added);
@@ -247,6 +247,7 @@ export function Root() {
       // After the first answer the browser kept, the log is asked not to be cleared under storage pressure. Firefox shows a prompt for it,
       // so there it is asked when the learner saves their progress to a file (`settings.tsx`).
       if (!persistOnClick() && added.some((e) => e.type === "attempt")) requestPersistence();
+      flushLeftovers.current();
     } catch {
       saved = false;
       setSaveFailed(true);
@@ -258,20 +259,27 @@ export function Root() {
 
   // One write per exam at a time: every practice answer calls `run` again, and each would otherwise start the same write anew.
   const inFlight = useRef(new Map<string, Promise<boolean>>());
-  const storePending = useCallback((sessionId: string, added: ProgressEvent[]) => {
-    const going = inFlight.current.get(sessionId);
-    if (going) return going;
+  const storePending = useCallback((sessionId: string, added: ProgressEvent[]) => sharedRun(inFlight.current, sessionId, () => {
     unwritten.current.set(sessionId, added);
     setWrites((now) => ({ ...now, [sessionId]: "saving" }));
     const io = { keep: keepUnwritten, drop: dropWritten, keptExam: () => loadSavedExam()?.session.id, clearExam: clearSavedExam, commit };
-    const write = writePending(sessionId, added, io).then((stored) => {
+    // A write that throws counts as failed, so the state never stays "saving" and "Записать ещё раз" stays offered.
+    return writePending(sessionId, added, io).catch(() => false).then((stored) => {
       if (stored) unwritten.current.delete(sessionId);
       setWrites((now) => ({ ...now, [sessionId]: stored ? "saved" : "failed" }));
+      // After this write has left `inFlight` (a timer, not a microtask: the entry goes in a later step of the same chain).
+      if (stored && sessionId !== LEFTOVERS) setTimeout(() => flushLeftovers.current(), 0);
       return stored;
-    }).finally(() => inFlight.current.delete(sessionId));
-    inFlight.current.set(sessionId, write);
-    return write;
-  }, [commit]);
+    });
+  }), [commit]);
+  // Answers left in `KEYS.unwritten` by an earlier run (its writes failed until the app closed) are written at launch and again after
+  // any later save that gets through, so a storage that has recovered takes them without a button. Never beside another write
+  // (a leftover that cannot be written must not fail a fresh answer), and a leftovers write never starts another one.
+  flushLeftovers.current = () => {
+    if (inFlight.current.size > 0) return;
+    const left = loadUnwritten();
+    if (left.length) void storePending(LEFTOVERS, left);
+  };
   const retryPending = useCallback((sessionId: string) => {
     const added = unwritten.current.get(sessionId);
     if (added) void storePending(sessionId, added);

@@ -116,5 +116,7 @@ describe("reloadAllowed", () => {
     expect(reloadAllowed(9000, 1000)).toBe(true);
     // Offline the chunk is missing for want of a network: no reload, whatever the mark says.
     expect(reloadAllowed(null, 1000, false)).toBe(false);
+    // Practice lives only in memory: a reload would lose it, and the screen works with plain text.
+    expect(reloadAllowed(null, 1000, true, true)).toBe(false);
   });
 });

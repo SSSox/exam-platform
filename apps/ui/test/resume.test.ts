@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import katex from "katex";
 import type { ProgressEvent, Session, SessionItem } from "@exam/core";
 import {
-  KEYS, draftResponse, fitsBundle, keptOnStart, parseSavedExam, parseUnwritten, pinnedBanks, withUnwritten, withoutWritten, writePending, safeStyle, settleDrafts, unansweredCount, wipe, type SavedExam,
+  KEYS, draftResponse, fitsBundle, keptOnStart, parseSavedExam, parseUnwritten, pinnedBanks, sharedRun, withUnwritten, withoutWritten, writePending, safeStyle, settleDrafts, unansweredCount, wipe, type SavedExam,
 } from "../src/lib.ts";
 
 const T0 = 1_700_000_000_000;
@@ -233,5 +233,37 @@ describe("writing a finished exam's answers (writePending)", () => {
     s.exam = "A";
     await writePending("A", [ev("a1")], io);
     expect(s.exam).toBeUndefined();
+  });
+});
+
+describe("one write per exam at a time (sharedRun)", () => {
+  test("a second call while the first is going starts nothing and gets the same result", async () => {
+    const running = new Map<string, Promise<boolean>>();
+    let starts = 0;
+    let finish!: (ok: boolean) => void;
+    const start = () => (starts++, new Promise<boolean>((r) => (finish = r)));
+    const first = sharedRun(running, "A", start);
+    const second = sharedRun(running, "A", start);
+    expect(second).toBe(first);
+    expect(starts).toBe(1);
+    finish(false);
+    expect(await second).toBe(false);
+    expect(running.size).toBe(0);
+  });
+  test("after a failure or a rejection the next call starts a new write", async () => {
+    const running = new Map<string, Promise<boolean>>();
+    let starts = 0;
+    await sharedRun(running, "A", async () => (starts++, false));
+    await sharedRun(running, "A", async () => { starts++; throw new Error("x"); }).catch(() => undefined);
+    expect(running.size).toBe(0);
+    expect(await sharedRun(running, "A", async () => (starts++, true))).toBe(true);
+    expect(starts).toBe(3);
+  });
+  test("different exams write side by side", () => {
+    const running = new Map<string, Promise<boolean>>();
+    const a = sharedRun(running, "A", () => new Promise(() => {}));
+    const b = sharedRun(running, "B", () => new Promise(() => {}));
+    expect(a).not.toBe(b);
+    expect(running.size).toBe(2);
   });
 });

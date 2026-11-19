@@ -219,6 +219,23 @@ export function withoutWritten(kept: ProgressEvent[], written: ProgressEvent[]):
   return kept.filter((e) => !ids.has(e.id));
 }
 
+/**
+ * One run per key at a time: a call while the key's run is still going gets that run, not a new one. The entry goes when the run
+ * settles, so the next call after a failure or a rejection starts afresh.
+ */
+export function sharedRun<T>(running: Map<string, Promise<T>>, key: string, start: () => Promise<T>): Promise<T> {
+  const going = running.get(key);
+  if (going) return going;
+  const run: Promise<T> = start().finally(() => {
+    if (running.get(key) === run) running.delete(key);
+  });
+  running.set(key, run);
+  return run;
+}
+
+/** The write id of answers left in `KEYS.unwritten` by an earlier run of the app (not a session id: those are UUIDs). */
+export const LEFTOVERS = "leftovers";
+
 /** The storage a finished exam's answers pass through on the way to the log (`storePending` in `app.tsx` gives the real one). */
 export interface PendingIO {
   keep(events: ProgressEvent[]): void;
@@ -553,7 +570,7 @@ export function examProfile(exam: unknown): { minutes: number; count: number; le
   // A level listed twice counts once with both numbers added: two draws from one level would take the same questions twice.
   const sound = Array.isArray(listed) && listed.every((s) => isObject(s) && Number.isSafeInteger(s.level) && Number.isSafeInteger(s.count) && (s.count as number) >= 0);
   const levels = sound
-    ? [...(listed as LevelShare[]).reduce((by, s) => by.set(s.level, (by.get(s.level) ?? 0) + s.count), new Map<number, number>())].map(([level, n]) => ({ level, count: n }))
+    ? [...(listed as LevelShare[]).reduce((by, s) => by.set(s.level, (by.get(s.level) ?? 0) + s.count), new Map<number, number>())].map(([level, n]) => ({ level, count: n })).sort((a, b) => a.level - b.level)
     : listed;
   return isShares(levels) ? { minutes, count, levels } : { minutes, count };
 }
