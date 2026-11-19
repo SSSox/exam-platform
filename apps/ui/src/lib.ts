@@ -495,3 +495,14 @@ export function sessionKey(e: SessionKeyEvent, options: number): { pick: number 
   const n = digit ? Number(digit[1]) : 0;
   return n >= 1 && n <= options ? { pick: n - 1 } : undefined;
 }
+
+/** The options picked after one is pressed: a single choice is replaced, a multiple choice flips that option. */
+export const toggleChoice = (selected: string[], id: string, single: boolean): string[] =>
+  single ? [id] : selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
+
+/** What the learner answered, as lines to show in the review: the chosen options' texts, or the typed texts; none when nothing was answered or the way of answering gave no text. */
+export function givenLines(response: Response | undefined, q: Question, text: (value: Localized | undefined) => string): string[] {
+  if (response?.mode === "choice" && (q.type === "single_choice" || q.type === "multiple_choice")) return q.options.filter((o) => response.selected.includes(o.id)).map((o) => text(o.text));
+  if (response?.mode === "typed") return response.texts.map((x) => x.trim()).filter(Boolean);
+  return [];
+}

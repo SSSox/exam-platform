@@ -240,7 +240,9 @@ input[type="number"]:focus-visible, input[type="text"]:focus-visible, .select se
 .row-main { display: grid; grid-column: 2 / 4; gap: 2px; min-width: 0; }
 .row-title { min-width: 0; font-size: 16px; font-weight: 600; line-height: 1.3; }
 .row-sub { font-size: 13px; line-height: 1.4; color: var(--ink-2); }
-.row-n { font-size: 13px; color: var(--ink-2); text-align: right; white-space: nowrap; }
+.row-n { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0 10px; font-size: 13px; color: var(--ink-2); text-align: right; }
+.row-n > span { white-space: nowrap; }
+.row-due { color: var(--accent-ink); font-weight: 600; }
 .row .line { grid-column: 2 / 4; }
 
 /* A subject line: stations on a bar, lit ones are filled */
@@ -283,6 +285,22 @@ input[type="number"]:focus-visible, input[type="text"]:focus-visible, .select se
 .meter { display: block; height: 6px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
 .meter i { display: block; height: 100%; border-radius: 3px; background: var(--c); transform-origin: left center; animation: grow 400ms var(--out) backwards; }
 .map-hint { margin: -4px 6px 12px; }
+.search { position: relative; margin-bottom: 12px; }
+.search input { padding-right: 48px; }
+.search-clear { position: absolute; top: 2px; right: 2px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink-2); cursor: pointer; }
+.search-clear:hover { color: var(--ink); }
+.found { display: grid; gap: 2px; padding: 6px; }
+.found-row { display: grid; grid-template-columns: auto 3.4em minmax(0, 1fr); align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 8px 10px; border: 0; border-radius: 14px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background-color 120ms; }
+.found-row:hover { background: var(--sunk); }
+.found-row .cell { --s: 18px; }
+.found-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
+.found-none { margin: 4px 6px; }
+.like-exam { justify-self: start; height: auto; padding-block: 8px; line-height: 1.3; text-align: left; white-space: normal; }
+.exam-history { display: grid; gap: 4px; }
+.exam-history .label { margin: 0; }
+.exam-history li { display: grid; grid-template-columns: minmax(0, 1fr) auto 3.5em; gap: 12px; align-items: baseline; font-size: 14px; font-variant-numeric: tabular-nums; }
+.exam-history li > :first-child { color: var(--ink-2); }
+.exam-history strong { text-align: right; }
 .legend { gap: 2px 4px; }
 .legend-item { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 8px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-2); font: 600 13px/1 var(--ui); cursor: pointer; }
 .legend-item:hover:not(:disabled) { background: var(--sunk); color: var(--ink); }
@@ -358,6 +376,8 @@ progress.track::-moz-progress-bar { background: var(--c); border-radius: 3px; }
 .option.right { --c: var(--good); --on: var(--card); }
 .option.wrong, .inputs input.wrong { border-color: var(--bad); background: var(--bad-soft); }
 .option.wrong { --c: var(--bad); --on: var(--card); }
+.key-hint { display: none; flex: none; margin-left: auto; color: var(--ink-3); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (hover: hover) and (pointer: fine) { .key-hint { display: inline; } }
 .inputs { display: grid; gap: 10px; width: 100%; max-width: 480px; }
 .inputs input { height: 52px; font-size: 18px; }
 
@@ -426,8 +446,23 @@ progress.track::-moz-progress-bar { background: var(--c); border-radius: 3px; }
 .review-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; }
 .review-head h2 { margin: 0; }
 .review { display: grid; gap: 10px; }
-.review li { display: grid; grid-template-columns: 64px minmax(0, 1fr) 20px; gap: 12px; align-items: start; padding: 14px 16px; background: var(--card); border-radius: 18px; box-shadow: var(--shadow); }
-.review li > div { display: grid; gap: 4px; min-width: 0; }
+.review li { background: var(--card); border-radius: 18px; box-shadow: var(--shadow); }
+.review summary { display: grid; grid-template-columns: 64px minmax(0, 1fr) 20px 18px; gap: 12px; align-items: start; min-height: 44px; padding: 14px 16px; border-radius: 18px; list-style: none; cursor: pointer; }
+.review summary::-webkit-details-marker { display: none; }
+.review summary::marker { content: ""; }
+.review summary > div { display: grid; gap: 4px; min-width: 0; }
+.review summary:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+.review summary svg.chev { color: var(--ink-3); transition: transform 160ms var(--out); }
+.review details[open] svg.chev { transform: rotate(180deg); }
+/* Open, the answers below say what the line under the question said. */
+.review details[open] summary .meta { display: none; }
+/* On a phone the number takes its own line with the marks, and the question gets the whole width. */
+@media (max-width: 480px) {
+  .review summary { grid-template-columns: minmax(0, 1fr) 20px 18px; gap: 8px 12px; }
+  .review summary > div { grid-column: 1 / -1; grid-row: 2; }
+}
+.review-more { display: grid; gap: 12px; padding: 0 16px 16px; overflow-wrap: anywhere; }
+.review-more > * { min-width: 0; }
 .review .ok svg { color: var(--good-ink); }
 .review .bad svg, .review .none svg { color: var(--bad-ink); }
 
@@ -510,9 +545,16 @@ html:has(.dock) { scroll-padding-bottom: calc(var(--dock, 72px) + 16px); }
 @media (max-width: 420px) {
   /* The count goes under the subject's name, so a long name is not squeezed into letters. */
   .row.bank .row-title { grid-column: 2 / 4; }
-  .row.bank .row-n { grid-column: 2 / 4; grid-row: 2; text-align: left; }
+  .row.bank .row-n { grid-column: 2 / 4; grid-row: 2; justify-content: flex-start; text-align: left; }
   .row.bank .line { grid-row: 3; }
   .row.bank .badge, .row.bank > svg { grid-row: 1 / 4; }
+}
+@media (min-width: 421px) and (max-width: 560px) {
+  /* A row with a count due for review has two things to say about the bank: the same stacked layout, a little longer. */
+  .row.bank.has-due .row-title { grid-column: 2 / 4; }
+  .row.bank.has-due .row-n { grid-column: 2 / 4; grid-row: 2; justify-content: flex-start; text-align: left; }
+  .row.bank.has-due .line { grid-row: 3; }
+  .row.bank.has-due .badge, .row.bank.has-due > svg { grid-row: 1 / 4; }
 }
 @media (max-height: 480px) {
   /* A phone on its side: the bar takes less of the little height there is. */

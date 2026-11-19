@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { Question } from "@exam/schema";
 import { attemptEvent, createSession, finish, isDue, learn, project, submit, type ProgressEvent, type QuestionState } from "@exam/core";
-import { KEYS, backupDue, buildSession, dueCount, examProfile, findQuestions, fitSetup, isProgressEvent, parseSetups, sessionKey, storeSetup, type Setup } from "../src/lib.ts";
+import { KEYS, backupDue, buildSession, dueCount, examProfile, findQuestions, fitSetup, isProgressEvent, parseSetups, sessionKey, storeSetup, toggleChoice, givenLines, type Setup } from "../src/lib.ts";
 
 const q = (data: unknown) => Question.parse(data);
 const choice = (id: number, topic: number, extra: object = {}) => q({
@@ -313,5 +313,31 @@ describe("exam marker in the log", () => {
     expect(isProgressEvent(roundTrip)).toBe(true);
     const { exam: _exam, of: _of, ...practice } = event;
     expect(project([event as ProgressEvent], "b")).toEqual(project([practice as ProgressEvent], "b"));
+  });
+});
+
+describe("toggleChoice", () => {
+  test("a single choice is replaced, a multiple choice flips", () => {
+    expect(toggleChoice(["A"], "B", true)).toEqual(["B"]);
+    expect(toggleChoice(["A"], "B", false)).toEqual(["A", "B"]);
+    expect(toggleChoice(["A", "B"], "A", false)).toEqual(["B"]);
+  });
+});
+
+describe("givenLines", () => {
+  const plainText = (v: unknown) => (typeof v === "string" ? v : "");
+  const two = choice(1, 1);
+  test("choice: the texts of the picked options in the order shown in the bank", () => {
+    expect(givenLines({ mode: "choice", selected: ["B"] }, two, plainText)).toEqual(["second"]);
+    expect(givenLines({ mode: "choice", selected: ["B", "A"] }, two, plainText)).toEqual(["first", "second"]);
+  });
+  test("typed: trimmed non-empty texts", () => {
+    expect(givenLines({ mode: "typed", texts: [" Астана ", "  "] }, two, plainText)).toEqual(["Астана"]);
+  });
+  test("no answer, a self-check and an unknown option give nothing", () => {
+    expect(givenLines(undefined, two, plainText)).toEqual([]);
+    expect(givenLines({ mode: "self_check", knew: true }, two, plainText)).toEqual([]);
+    expect(givenLines({ mode: "choice", selected: ["Z"] }, two, plainText)).toEqual([]);
+    expect(givenLines({ mode: "choice", selected: ["A"] }, open(5), plainText)).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
 import Dexie from "dexie";
 import { ContentClient, uuidv7, type Http, type KeyValue, type ProgressEvent } from "@exam/core";
-import { KEYS, isShell, parseSavedExam, pinnedBanks, wipe, type SavedExam } from "./lib.ts";
+import { KEYS, isShell, parseSavedExam, parseSetups, pinnedBanks, storeSetup, wipe, type SavedExam, type Setup } from "./lib.ts";
 
 const db = new Dexie("exam-platform");
 db.version(1).stores({ kv: "", events: "id" });
@@ -138,6 +138,40 @@ export function forgetPlace(): void {
     localStorage.removeItem(KEYS.place);
   } catch {
     // nothing to forget
+  }
+}
+
+/** The setup remembered for a bank, as stored (it is fitted to the bank by `fitSetup`). Unreadable storage means nothing is remembered. */
+export function loadSetup(bank: string): Setup | undefined {
+  try {
+    return parseSetups(localStorage.getItem(KEYS.setup))[bank];
+  } catch {
+    return undefined;
+  }
+}
+export function rememberSetup(bank: string, setup: Setup): void {
+  try {
+    localStorage.setItem(KEYS.setup, storeSetup(localStorage.getItem(KEYS.setup), bank, setup));
+  } catch {
+    // not remembered
+  }
+}
+
+/** When the progress was last saved to a file, if ever. */
+export function lastBackup(): number | undefined {
+  try {
+    const raw = localStorage.getItem(KEYS.backup);
+    const at = raw == null ? NaN : Number(raw);
+    return Number.isFinite(at) ? at : undefined;
+  } catch {
+    return undefined;
+  }
+}
+export function markBackup(): void {
+  try {
+    localStorage.setItem(KEYS.backup, String(Date.now()));
+  } catch {
+    // the reminder just comes again
   }
 }
 

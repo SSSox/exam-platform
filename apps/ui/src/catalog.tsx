@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronRight } from "lucide-react";
 import { descend, entriesOf, placeOf, project, restore, rootEntries, walk, type Entry, type NodeManifest, type NodeRef, type Target } from "@exam/core";
-import { client, forgetPlace, loadPlace, storePlace } from "./platform.ts";
+import { client, forgetPlace, inShell, lastBackup, loadPlace, storePlace } from "./platform.ts";
 import { Status, useApp, useAsync } from "./app.tsx";
 import { Line } from "./line.tsx";
 import { forgetHome, rememberHome } from "./home.ts";
 import { Stops, stopsOf } from "./stops.tsx";
 import { DownloadLine } from "./downloads.tsx";
 import { UpdateLine } from "./updates.tsx";
-import { STATIONS, bankProgress, changeTarget, homeOf, lineOf, namesLine, pathNames, sharedKind, shortTitle, stationsOf, type Station } from "./lib.ts";
+import { STATIONS, backupDue, bankProgress, changeTarget, dueCount, homeOf, lineOf, namesLine, pathNames, sharedKind, shortTitle, stationsOf, type Station } from "./lib.ts";
 
 export const load = (ref: NodeRef) => client.node(ref.hash);
 
@@ -86,6 +86,7 @@ export function NodeScreen({ path }: { path: string }) {
         {isPlace && <h2 className="sec">{t("catalog.title")}</h2>}
         {entries.length ? <Rows entries={entries} node={node} /> : <p className="muted">{t("state.empty")}</p>}
         <UpdateLine />
+        <BackupLine />
         <DownloadLine />
       </div>
     </div>
@@ -113,6 +114,19 @@ function Where({ stations, heading, own }: { stations: Station[]; heading: strin
   );
 }
 
+/** A quiet reminder to save the progress to a file, on the web page only: the browser can clear what it keeps. */
+function BackupLine() {
+  const { t } = useTranslation();
+  const { events } = useApp();
+  if (!backupDue({ shell: inShell(), events: events.length, lastBackup: lastBackup(), now: Date.now() })) return null;
+  return (
+    <p className="get-app">
+      <span>{t("backup.line")}</span>
+      <span className="get-app-links"><a className="button quiet" href="#/settings">{t("backup.save")}</a></span>
+    </p>
+  );
+}
+
 const MAX_PEEK = 12;
 
 function Rows({ entries, node }: { entries: Entry[]; node?: NodeManifest }) {
@@ -122,7 +136,12 @@ function Rows({ entries, node }: { entries: Entry[]; node?: NodeManifest }) {
 
   const progress = useMemo(() => {
     const now = Date.now();
-    return new Map(entries.flatMap((e) => (e.type === "bank" ? [[e.ref.id, bankProgress(project(events, e.ref.id), e.ref.questions, now, e.ref.retired)] as const] : [])));
+    // One projection per bank serves both the mastery line and the count due for review.
+    return new Map(entries.flatMap((e) => {
+      if (e.type !== "bank") return [];
+      const states = project(events, e.ref.id);
+      return [[e.ref.id, { ...bankProgress(states, e.ref.questions, now, e.ref.retired), due: dueCount(states, now, e.ref.retired) }] as const];
+    }));
   }, [entries, events]);
 
   // What a folder holds, as a hint under its name. Skipped for long lists: each folder is one more request.
@@ -162,10 +181,13 @@ function Rows({ entries, node }: { entries: Entry[]; node?: NodeManifest }) {
         const p = progress.get(e.ref.id)!;
         return (
           <li key={e.ref.id}>
-            <a className="card row bank" href={`#/bank?node=${node!.id}&id=${e.ref.id}`} data-l={lineOf(i)} style={style}>
+            <a className={p.due > 0 ? "card row bank has-due" : "card row bank"} href={`#/bank?node=${node!.id}&id=${e.ref.id}`} data-l={lineOf(i)} style={style}>
               <span className="badge" aria-hidden>{i + 1}</span>
               <strong className="row-title">{shortTitle(text(e.ref.subject, e.ref.language), group)}</strong>
-              <span className="row-n">{t("catalog.progress", { done: p.done, total: p.total })}</span>
+              <span className="row-n">
+                <span>{t("catalog.progress", { done: p.done, total: p.total })}</span>
+                {p.due > 0 && <span className="row-due">{t("catalog.due", { n: p.due })}</span>}
+              </span>
               <Line count={STATIONS} lit={p.lit} delay={100 + at * 40} />
               <ChevronRight size={18} strokeWidth={1.5} aria-hidden />
             </a>

@@ -5,7 +5,7 @@ import { BookOpen, Settings as SettingsIcon } from "lucide-react";
 import { mergeLogs, type BankBundle, type ContentIndex, type ProgressEvent, type Session } from "@exam/core";
 import type { Localized } from "@exam/schema";
 import { pick } from "@exam/schema/pick";
-import { applyTheme, clearSavedExam, client, loadEvents, loadSavedExam, loadSettings, saveEvents, storeSettings, LOCALE_NAMES, UI_LOCALES, type Settings } from "./platform.ts";
+import { applyTheme, clearSavedExam, client, inShell, loadEvents, loadSavedExam, loadSettings, saveEvents, storeSettings, LOCALE_NAMES, UI_LOCALES, type Settings } from "./platform.ts";
 import ru from "./locales/ru.json";
 import kk from "./locales/kk.json";
 import en from "./locales/en.json";
@@ -16,7 +16,7 @@ import { SettingsScreen } from "./settings.tsx";
 import { Confirm, Select } from "./ui.tsx";
 import { useHome } from "./home.ts";
 import { takeBack } from "./back.ts";
-import { fitsBundle, holdExam, showContent, type ContentShown, type Draft } from "./lib.ts";
+import { fitsBundle, holdExam, showContent, type ContentShown, type Draft, type Setup } from "./lib.ts";
 
 const initial = loadSettings();
 /** Sets the theme before the first paint; the effect in Root takes over and stops this one's system listener. */
@@ -32,8 +32,9 @@ void i18next.use(initReactI18next).init({
 /**
  * `hash` is the bank file in the content cache: a running exam is kept in local storage without the bank itself (see `SavedExam`) and loads it again by this.
  * `drafts` are the unsent answers an exam restored from storage starts with.
+ * `setup` is what the learner asked of the bank's panel, so the result can start the same session again; a restored exam and a single question have none.
  */
-export interface Running { session: Session; bundle: BankBundle; back: string; line?: number; hash: string; drafts?: Record<number, Draft> }
+export interface Running { session: Session; bundle: BankBundle; back: string; line?: number; hash: string; drafts?: Record<number, Draft>; setup?: Setup }
 
 interface App {
   settings: Settings;
@@ -41,6 +42,8 @@ interface App {
   index?: ContentIndex;
   offline: boolean;
   events: ProgressEvent[];
+  /** Whether the stored log has been read (or failed to be): until then `events` may be short. */
+  logReady: boolean;
   append(events: ProgressEvent[]): Promise<number>;
   /** Adds events like `append`, and says whether the device stored them. */
   commit(events: ProgressEvent[]): Promise<boolean>;
@@ -93,13 +96,15 @@ function useContent(): ContentShown & { reload(): void } {
 }
 
 const useRoute = () => {
-  const [hash, setHash] = useState(location.hash);
+  const [, changed] = useState(0);
   useEffect(() => {
-    const on = () => setHash(location.hash);
+    const on = () => changed((n) => n + 1);
     addEventListener("hashchange", on);
     return () => removeEventListener("hashchange", on);
   }, []);
-  const [path = "", query = ""] = hash.replace(/^#\/?/, "").split("?");
+  // Read from the address bar at every render, not kept from the last hashchange: a session that ends and sets the address in one step
+  // would otherwise be drawn once as "#/session" with nothing running, which is the way home, and home would win over the address just set.
+  const [path = "", query = ""] = location.hash.replace(/^#\/?/, "").split("?");
   return { path, query: new URLSearchParams(query) };
 };
 
@@ -107,6 +112,7 @@ export function Root() {
   const { t } = useTranslation();
   const [settings, setSettings] = useState(initial);
   const [events, setEvents] = useState<ProgressEvent[]>([]);
+  const [logReady, setLogReady] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
   const [running, setRunning] = useState<Running>();
   const [restoreFailed, setRestoreFailed] = useState(false);
@@ -118,6 +124,7 @@ export function Root() {
   }, []);
   const route = useRoute();
   const home = useHome();
+  const asked = useRef(false);
   const latest = useRef({ settings, events });
   latest.current = { settings, events };
 
@@ -175,7 +182,11 @@ export function Root() {
       const merged = mergeLogs(latest.current.events, stored);
       latest.current.events = merged;
       setEvents(merged);
-    }, () => setSaveFailed(true));
+      setLogReady(true);
+    }, () => {
+      setSaveFailed(true);
+      setLogReady(true);
+    });
   }, []);
   // A new screen starts at its top, not where the previous one was scrolled to.
   const path = held ? "session" : route.path;
@@ -212,6 +223,15 @@ export function Root() {
     let saved = true;
     try {
       await saveEvents(added);
+      // Once per launch, after the first answer the browser kept: it is asked not to clear the log under storage pressure. The apps keep their data themselves.
+      if (!asked.current && !inShell() && added.some((e) => e.type === "attempt")) {
+        asked.current = true;
+        try {
+          void navigator.storage?.persist?.().catch(() => {});
+        } catch {
+          // an unsupported browser keeps the log as before
+        }
+      }
     } catch {
       saved = false;
       setSaveFailed(true);
@@ -225,11 +245,11 @@ export function Root() {
     const wanted = settings.content === "auto" ? settings.ui : settings.content;
     const chain = [wanted, settings.ui];
     return {
-      settings, update, index: content.index, offline: content.offline, events, append, commit, running, run,
+      settings, update, index: content.index, offline: content.offline, events, logReady, append, commit, running, run,
       text: (value, language = "ru") => (value == null ? "" : pick(value, chain, language).text),
       fellBack: (value, language) => pick(value, chain, language).locale !== wanted,
     };
-  }, [settings, update, content.index, content.offline, events, append, commit, running, run]);
+  }, [settings, update, content.index, content.offline, events, logReady, append, commit, running, run]);
 
   let screen: ReactNode;
   if (path === "session" && running) screen = <SessionScreen key={running.session.id} />;

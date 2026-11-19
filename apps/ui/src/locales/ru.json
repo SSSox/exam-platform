@@ -29,7 +29,12 @@
     "questions_few": "{{count}} вопроса",
     "questions_many": "{{count}} вопросов",
     "questions_other": "{{count}} вопроса",
-    "available": "Доступно на языках"
+    "available": "Доступно на языках",
+    "due": "повторить: {{n}}"
+  },
+  "backup": {
+    "line": "Давно не сохраняли ответы в файл",
+    "save": "Сохранить"
   },
   "bank": {
     "map": "Карта вопросов",
@@ -74,7 +79,14 @@
     "resetTopics": "Сбросить",
     "nothing": "Под эти условия не подходит ни один вопрос",
     "typedShare": "Ввод с автопроверкой: {{typed}} из {{total}}, остальные идут самопроверкой",
-    "answered": "Отвечено"
+    "answered": "Отвечено",
+    "search": "Поиск по вопросам",
+    "searchClear": "Очистить поиск",
+    "noResults": "Ничего не найдено",
+    "results": "Найденные вопросы",
+    "likeExam": "Как на экзамене",
+    "history": "Пробные экзамены",
+    "examScore": "{{correct}} из {{total}}"
   },
   "peek": {
     "close": "Закрыть",
@@ -154,7 +166,10 @@
     "unanswered": "Нет ответа",
     "showAll": "Показать все ({{count}})",
     "onlyMissed": "Только ошибки и пропуски",
-    "allRight": "Все ответы верные"
+    "allRight": "Все ответы верные",
+    "again": "Ещё раз",
+    "fixMistakes": "Повторить ошибки ({{n}})",
+    "yourAnswer": "Ваш ответ"
   },
   "settings": {
     "theme": "Тема",

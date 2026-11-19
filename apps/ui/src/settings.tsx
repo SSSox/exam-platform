@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Monitor, Moon, Sun } from "lucide-react";
-import { LOCALE_NAMES, THEMES, UI_LOCALES, clearAppData, forgetPlace, loadPlace, storageUsed, type Theme } from "./platform.ts";
+import { LOCALE_NAMES, THEMES, UI_LOCALES, clearAppData, forgetPlace, loadPlace, markBackup, storageUsed, type Theme } from "./platform.ts";
 import { isProgressEvent } from "./lib.ts";
 import { forgetHome } from "./home.ts";
 import { useApp } from "./app.tsx";
@@ -83,6 +83,7 @@ export function SettingsScreen() {
       const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([json], { type: "application/json" })), download: name });
       link.click();
       URL.revokeObjectURL(link.href);
+      markBackup();
     };
     const picker = (window as { showSaveFilePicker?: SaveFilePicker }).showSaveFilePicker;
     if (!picker) return download();
@@ -96,6 +97,7 @@ export function SettingsScreen() {
       const writable = await target.createWritable();
       await writable.write(json);
       await writable.close();
+      markBackup();
       setMessage(t("settings.saved"));
     } catch {
       setMessage(t("settings.saveFailed"));

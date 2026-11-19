@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, ChevronDown, SlidersHorizontal } from "lucide-react";
-import { bankStats, entriesOf, placeOf, project, uuidv7, walk, type AnswerMode, type Status as QuestionStatus } from "@exam/core";
+import { ArrowLeft, ChevronDown, SlidersHorizontal, X } from "lucide-react";
+import { bankStats, entriesOf, examHistory, placeOf, project, uuidv7, walk, type AnswerMode, type Status as QuestionStatus } from "@exam/core";
 import type { Question } from "@exam/schema";
-import { client, deviceId, storePlace } from "./platform.ts";
+import { client, deviceId, loadSetup, rememberSetup, storePlace } from "./platform.ts";
 import { Status, useApp, useAsync } from "./app.tsx";
 import { hashOf, load } from "./catalog.tsx";
 import { rememberHome } from "./home.ts";
@@ -11,7 +11,7 @@ import { Segmented, Select, SideSheet, useDockHeight, useWide } from "./ui.tsx";
 import { Peek } from "./peek.tsx";
 import { STATUSES, StatusMark } from "./status.tsx";
 import { Stops, stopsOf } from "./stops.tsx";
-import { buildSession, homeOf, lineOf, pageAbove, pathNames, stationsOf } from "./lib.ts";
+import { buildSession, examProfile, findQuestions, fitSetup, homeOf, lineOf, pageAbove, pathNames, stationsOf, type Setup } from "./lib.ts";
 
 type Filter = QuestionStatus | "due" | null;
 type Scope = "smart" | "all" | "mistakes" | "bookmarks";
@@ -73,7 +73,7 @@ function Cells({ questions, label, status, due, filter, onOpen }: {
 
 export function BankScreen({ node, bank: bankId }: { node: string; bank: string }) {
   const { t } = useTranslation();
-  const { index, events, text, settings, run, append } = useApp();
+  const { index, events, logReady, text, settings, run, append } = useApp();
   const loaded = useAsync(async () => {
     const chain = await walk(index!.roots, node, load);
     const folder = chain.at(-1);
@@ -103,6 +103,13 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
   // "Nothing fits" is about the settings it was shown for: any change of them takes it back.
   useEffect(() => setNothing(false), [scope, kind, answerMode, topics, level, count]);
   const [filter, setFilter] = useState<Filter>(null);
+  // The id of the bank whose remembered setup the panel shows. Set while rendering, so the panel never shows the defaults first.
+  const [fitted, setFitted] = useState<string>();
+  // True while the bank has no remembered setup: its first switch to the exam takes the exam's own size.
+  const fresh = useRef(false);
+  const lastStored = useRef("");
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const dockBar = useDockHeight();
   // Beside the map the preparation panel is a column; where there is no room for one it slides in from the right (`SideSheet`).
   const wide = useWide();
@@ -128,12 +135,42 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
     const now = Date.now();
     return { states, now, stats: bankStats(states, questions, now), active: questions.filter((q) => !q.retired) };
   }, [loaded.data, events, minute]);
-  if (!loaded.data || !view) return <Status error={loaded.error} reload={loaded.reload} />;
+  const found = useMemo(
+    () => (view && deferredQuery.trim().length >= 2 ? findQuestions(view.active, deferredQuery, (v) => text(v, loaded.data?.bundle.bank.language)) : undefined),
+    [view, deferredQuery, text, loaded.data],
+  );
+  const bankKey = loaded.data?.bundle.bank.id;
+  useEffect(() => {
+    if (!bankKey || fitted !== bankKey) return;
+    const setup: Setup = { scope, answerMode, kind, topics, level, count, minutes };
+    const json = JSON.stringify(setup);
+    if (json === lastStored.current) return;
+    lastStored.current = json;
+    rememberSetup(bankKey, setup);
+  }, [bankKey, fitted, scope, answerMode, kind, topics, level, count, minutes]);
+
+  // The remembered setup is fitted to the bank as it is now, which needs the log: it says whether any mistakes or bookmarks are left.
+  if (!loaded.data || !view || !logReady) return <Status error={loaded.error} reload={loaded.reload} />;
 
   const { chain, ref, bundle, line } = loaded.data;
   const stations = stationsOf(index!.roots, chain);
   const { bank } = bundle;
   const { states, stats, active, now } = view;
+  if (fitted !== bank.id) {
+    const saved = loadSetup(bank.id);
+    const own = fitSetup(saved, { topicIds: bank.topics.map((tp) => tp.id), levels: bank.difficulty_scale?.map((s) => s.level) ?? [], mistakes: stats.mistakes.length, bookmarks: stats.bookmarks.length, questions: ref.questions });
+    fresh.current = !saved;
+    lastStored.current = JSON.stringify(own);
+    setScope(own.scope);
+    setAnswerMode(own.answerMode);
+    setKind(own.kind);
+    setTopics(own.topics);
+    setLevel(own.level);
+    setCount(own.count);
+    setMinutes(own.minutes);
+    setFitted(bank.id);
+    return null;
+  }
   const dueSet = new Set(stats.due);
   const statusOf = (id: number): QuestionStatus => stats.status.get(id) ?? "new";
   const counts = (st: QuestionStatus) => [...stats.status.values()].filter((x) => x === st).length;
@@ -155,15 +192,35 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
   /** `only` opens a session on that one question, whatever the panel says. */
   const start = (only?: Question) => {
     const at = Date.now();
-    const setup = { scope, answerMode, kind, topics, level, count, minutes };
+    const setup: Setup = { scope, answerMode, kind, topics, level, count, minutes };
     const session = buildSession({
       bankId: bank.id, questions: bundle.questions, states, stats, setup, unsupported: settings.unsupported,
       only: only && [only.id], now: at, seed: at % 2 ** 31, id: uuidv7(at),
     });
     if (only || session) setOpen(undefined);
     if (!session) return setNothing(true);
-    run({ session, bundle, back: location.hash, line, hash: ref.hash });
+    run({ session, bundle, back: location.hash, line, hash: ref.hash, setup: only ? undefined : setup });
     location.hash = "#/session";
+  };
+
+  const profile = examProfile(bank.exam);
+  const applyProfile = () => {
+    if (!profile) return;
+    setCount(Math.min(profile.count, active.length));
+    setMinutes(profile.minutes);
+  };
+  const chooseKind = (v: "practice" | "exam") => {
+    setKind(v);
+    if (v === "exam" && scope === "smart") setScope("all");
+    if (v === "exam" && fresh.current && profile) {
+      fresh.current = false;
+      applyProfile();
+    }
+  };
+  const history = examHistory(events, bank.id).slice(0, 5);
+  const shortDate = (at: number) => {
+    const year = new Date(at).getFullYear() === new Date(now).getFullYear() ? undefined : "numeric";
+    return new Intl.DateTimeFormat(settings.ui, { day: "numeric", month: "short", year }).format(at);
   };
 
   const toggleBookmark = (q: Question) => void append([{ id: uuidv7(Date.now()), type: "bookmark", at: Date.now(), device: deviceId, bank: bank.id, question: q.id, value: !states.get(q.id)?.bookmarked }]);
@@ -205,6 +262,20 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
         <div><dt>{t("mode.choice")}</dt><dd>{percent(stats.byMode.choice.correct, stats.byMode.choice.attempts)}</dd></div>
         <div><dt>{t("mode.typed")}</dt><dd>{percent(stats.byMode.typed.correct + stats.byMode.self_check.correct, stats.byMode.typed.attempts + stats.byMode.self_check.attempts)}</dd></div>
       </dl>
+      {history.length > 0 && (
+        <section className="exam-history" aria-labelledby="exam-history">
+          <p className="label" id="exam-history">{t("bank.history")}</p>
+          <ol>
+            {history.map((h) => (
+              <li key={h.session}>
+                <span>{shortDate(h.at)}</span>
+                <span>{t("bank.examScore", { correct: h.correct, total: h.of })}</span>
+                <strong>{h.percent}%</strong>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
     </>
   );
 
@@ -216,7 +287,7 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
       ]} />
       {answerMode === "typed" && <p className="hint">{t("bank.typedShare", { typed: ref.typed, total: ref.questions })}</p>}
 
-      <Segmented<"practice" | "exam"> label={t("bank.format")} value={kind} onChange={(v) => { setKind(v); if (v === "exam" && scope === "smart") setScope("all"); }} options={[
+      <Segmented<"practice" | "exam"> label={t("bank.format")} value={kind} onChange={chooseKind} options={[
         { value: "practice", title: t("bank.practice"), hint: t("bank.practiceHint") },
         { value: "exam", title: t("bank.exam"), hint: t("bank.examHint") },
       ]} />
@@ -252,6 +323,11 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
           </label>
         )}
       </div>
+      {kind === "exam" && profile && (
+        <button type="button" className="button like-exam" onClick={applyProfile}>
+          {t("bank.likeExam")}: {t("catalog.questions", { count: Math.min(profile.count, active.length) })}, {t("bank.minutesShort", { n: profile.minutes })}
+        </button>
+      )}
       <div className="field-row topics-set">
         <p className="hint">{topics.length ? `${t("bank.topics")}: ${topics.length}` : t("bank.allTopics")}</p>
         {topics.length > 0 && <button type="button" className="button quiet" onClick={() => setTopics([])}>{t("bank.resetTopics")}</button>}
@@ -290,7 +366,30 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
             </ul>
           </div>
           <p className="hint map-hint">{t("bank.mapHint")}</p>
-          <ul className="topics">
+          <div className="search">
+            <label className="visually-hidden" htmlFor="bank-search">{t("bank.search")}</label>
+            <input
+              id="bank-search" type="text" inputMode="search" enterKeyHint="search" autoComplete="off" spellCheck={false}
+              placeholder={t("bank.search")} value={query} onChange={(e) => setQuery(e.target.value)}
+            />
+            {query && <button type="button" className="search-clear" aria-label={t("bank.searchClear")} onClick={() => setQuery("")}><X size={18} strokeWidth={1.5} aria-hidden /></button>}
+          </div>
+          {found && !found.length && <p className="muted found-none" role="status">{t("bank.noResults")}</p>}
+          {found && found.length > 0 && (
+            <ul className="found card" aria-label={t("bank.results")}>
+              {found.map((r) => (
+                <li key={r.id}>
+                  <button type="button" className="found-row" onClick={() => setOpen(r.id)}>
+                    <StatusMark status={statusOf(r.id)} due={dueSet.has(r.id)} />
+                    <span className="ticket">№ {r.id}</span>
+                    <span className="found-text">{r.snippet}</span>
+                    <span className="visually-hidden">{t(`bank.legend.${statusOf(r.id)}`)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {!found && <ul className="topics">
             {bank.topics.map((topic) => {
               const share = stats.byTopicMastery.get(topic.id)?.mastery ?? 0;
               const name = text(topic.name, bank.language);
@@ -319,7 +418,7 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
                 </li>
               );
             })}
-          </ul>
+          </ul>}
         </section>
 
         {wide && <aside className="card panel" aria-label={t("bank.setup")}>{overview}{controls}</aside>}

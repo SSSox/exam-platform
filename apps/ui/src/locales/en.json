@@ -25,7 +25,12 @@
     "banks_other": "{{count}} banks",
     "questions_one": "{{count}} question",
     "questions_other": "{{count}} questions",
-    "available": "Available languages"
+    "available": "Available languages",
+    "due": "to review: {{n}}"
+  },
+  "backup": {
+    "line": "Your answers have not been saved to a file for a while",
+    "save": "Save"
   },
   "bank": {
     "map": "Question map",
@@ -70,7 +75,14 @@
     "resetTopics": "Clear",
     "nothing": "No question matches these settings",
     "typedShare": "Typed with auto-check: {{typed}} of {{total}}, the rest are self-checked",
-    "answered": "Answered"
+    "answered": "Answered",
+    "search": "Search questions",
+    "searchClear": "Clear search",
+    "noResults": "Nothing found",
+    "results": "Questions found",
+    "likeExam": "Like the exam",
+    "history": "Mock exams",
+    "examScore": "{{correct}} of {{total}}"
   },
   "peek": {
     "close": "Close",
@@ -150,7 +162,10 @@
     "unanswered": "No answer",
     "showAll": "Show all ({{count}})",
     "onlyMissed": "Only mistakes and skipped",
-    "allRight": "All answers are correct"
+    "allRight": "All answers are correct",
+    "again": "Again",
+    "fixMistakes": "Retry mistakes ({{n}})",
+    "yourAnswer": "Your answer"
   },
   "settings": {
     "theme": "Theme",

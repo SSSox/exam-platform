@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Bookmark, Check, X } from "lucide-react";
+import { Bookmark, Check, ChevronDown, X } from "lucide-react";
 import {
-  attemptEvent, bankTerms, finish, goTo, project, shuffled, submit, summarize, timeLeftSec, typedSlots, uuidv7,
+  attemptEvent, bankStats, bankTerms, finish, goTo, project, shuffled, submit, summarize, timeLeftSec, typedSlots, uuidv7,
   type Graded, type ProgressEvent, type Response, type Session, type SessionItem,
 } from "@exam/core";
-import type { Question } from "@exam/schema";
+import type { Localized, Question } from "@exam/schema";
 import { clearSavedExam, deviceId, loadSavedExam, saveExam } from "./platform.ts";
 import { useApp } from "./app.tsx";
 import { Rich } from "./rich.tsx";
 import { Line } from "./line.tsx";
 import { Confirm, useDockHeight } from "./ui.tsx";
-import { STATIONS, shown, submitDrafts, unansweredCount, type Draft } from "./lib.ts";
+import { STATIONS, buildSession, givenLines, sessionKey, shown, submitDrafts, toggleChoice, unansweredCount, type Draft, type Setup } from "./lib.ts";
 
 const number = (id: number) => `№ ${String(id).padStart(3, "0")}`;
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
@@ -45,7 +45,7 @@ function Verdict({ graded }: { graded: Graded }) {
 const ANSWER_FORM = "answer";
 
 /** `dock` is the place in the bottom bar where the question's own buttons (Check, Show the answer, Knew it) go. */
-function Answer({ q, item, language, locked, exam, dock, draft, onDraft, onSubmit }: { q: Question; item: SessionItem; language: string; locked: boolean; exam: boolean; dock: HTMLElement | null; draft: Draft; onDraft(patch: Draft): void; onSubmit(r: Response): void }) {
+function Answer({ q, item, order, language, locked, exam, dock, draft, onDraft, onSubmit }: { q: Question; item: SessionItem; order: { id: string; text: Localized }[]; language: string; locked: boolean; exam: boolean; dock: HTMLElement | null; draft: Draft; onDraft(patch: Draft): void; onSubmit(r: Response): void }) {
   const { t } = useTranslation();
   const { text } = useApp();
   const rightAnswer = useRightAnswer();
@@ -61,20 +61,22 @@ function Answer({ q, item, language, locked, exam, dock, draft, onDraft, onSubmi
 
   if (item.mode === "choice" && (q.type === "single_choice" || q.type === "multiple_choice")) {
     const single = q.type === "single_choice";
-    const pickOption = (id: string) => setSelected((old) => (single ? [id] : old.includes(id) ? old.filter((x) => x !== id) : [...old, id]));
+    const pickOption = (id: string) => setSelected((old) => toggleChoice(old, id, single));
     const send = (e: FormEvent) => { e.preventDefault(); if (!locked && selected.length) onSubmit({ mode: "choice", selected }); };
     return (
       <>
       <form id={ANSWER_FORM} onSubmit={send}>
         <p className="hint">{t(single ? "session.one" : "session.many")}</p>
         <ul className="options">
-          {shuffled(q.options, q.id + (item.again ?? 0) * 997).map((o) => {
+          {order.map((o, i) => {
             const state = !locked ? "" : q.correct_answers.includes(o.id) ? "right" : selected.includes(o.id) ? "wrong" : "";
             return (
               <li key={o.id}>
                 <label className={`option ${state}`}>
                   <input type={single ? "radio" : "checkbox"} name="option" checked={selected.includes(o.id)} disabled={locked} onChange={() => pickOption(o.id)} />
                   <Rich text={text(o.text, language)} inline />
+                  {/* The key that picks the option, shown only where there is a keyboard (see `.key-hint`). */}
+                  {!locked && i < 9 && <span className="key-hint" aria-hidden>{i + 1}</span>}
                   {/* Colour alone must not say which option was right: a mark and a word do too. */}
                   {state && (
                     <span className="verdict-mark">
@@ -129,7 +131,7 @@ function Answer({ q, item, language, locked, exam, dock, draft, onDraft, onSubmi
           {!locked && inDock(
             <>
               <button type="button" className="button" onClick={() => onSubmit({ mode: "self_check", knew: false })}>{t("session.didNot")}</button>
-              <button type="button" className="button primary" onClick={() => onSubmit({ mode: "self_check", knew: true })}>{t("session.knew")}</button>
+              <button type="button" className="button primary" data-no-enter onClick={() => onSubmit({ mode: "self_check", knew: true })}>{t("session.knew")}</button>
             </>,
           )}
         </>
@@ -192,6 +194,8 @@ export function SessionScreen() {
   const [drafts, setDrafts] = useState<Record<number, Draft>>(running!.drafts ?? {});
   const [asking, setAsking] = useState(false);
   const [allShown, setAllShown] = useState(false);
+  // A finished exam's answers wait in the kept copy until the log has them; a new session would wipe that copy (see `run`).
+  const [saved, setSaved] = useState(false);
   /** Where the open question puts its own buttons in the bottom bar. */
   const [dock, setDock] = useState<HTMLElement | null>(null);
   const dockBar = useDockHeight();
@@ -241,7 +245,10 @@ export function SessionScreen() {
       const pending = eventsOf(finished, indexes);
       saveExam({ v: 1, session: s, drafts, back, line, hash, pending });
       // Only its own copy: by the time the log answers, another exam may have been started and kept.
-      void log(pending, indexes).then((stored) => stored && loadSavedExam()?.session.id === s.id && clearSavedExam());
+      void log(pending, indexes).then((stored) => {
+        if (stored && loadSavedExam()?.session.id === s.id) clearSavedExam();
+        setSaved(stored);
+      });
     }
     set(finished);
   };
@@ -262,6 +269,14 @@ export function SessionScreen() {
 
   const leave = () => { run(undefined); location.hash = back; };
 
+  // One listener for the whole screen; the render in progress leaves it what the keys mean right now (digits pick an option, Enter does the main action).
+  const keys = useRef<((e: KeyboardEvent) => void) | undefined>(undefined);
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => keys.current?.(e);
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, []);
+
   // The row of question numbers scrolls sideways on a phone: keep the open question in view.
   const palette = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -269,6 +284,7 @@ export function SessionScreen() {
   }, [session.index]);
 
   if (done) {
+    keys.current = undefined;
     const summary = summarize(session);
     const seen = shown(session);
     const firsts = seen.filter((i) => !i.again);
@@ -277,6 +293,21 @@ export function SessionScreen() {
     // A long exam is mostly right answers: the review opens on what needs another look, and the rest is one tap away.
     const missed = firsts.filter((i) => !i.graded?.correct);
     const listed = allShown ? firsts : missed;
+    // A new session reads the log as it is now, so the second round already counts this one.
+    const another = (setup: Setup, only?: number[]) => {
+      const at = Date.now();
+      return buildSession({ bankId: session.bank, questions: bundle.questions, states, stats: bankStats(states, bundle.questions, at), setup, unsupported: settings.unsupported, only, now: at, seed: at % 2 ** 31, id: uuidv7(at) });
+    };
+    // A round of mistakes is not what the panel asked for, so its result does not offer it "again".
+    const begin = (next: Session | undefined, keep = true) => {
+      if (!next) return;
+      run({ ...running!, session: next, drafts: undefined, setup: keep ? running!.setup : undefined });
+      // The address stays `#/session`, so the screen is not told to start at the top.
+      scrollTo(0, 0);
+    };
+    const mistakesSetup: Setup = { scope: "all", answerMode: session.config.answerMode, kind: "practice", topics: [], level: 0, count: 0, minutes: 0 };
+    const again = running!.setup != null && another(running!.setup) != null;
+    const ready = !exam || saved;
     return (
       <div className="sheet" data-l={running!.line ?? 0}>
         <h1>{t("result.title")}</h1>
@@ -302,14 +333,31 @@ export function SessionScreen() {
             <ol className="review">
               {listed.map((item) => {
                 const q = questions.get(item.question)!;
+                const given = givenLines(item.response, q, (v) => text(v, language));
                 return (
                   <li key={q.id} className={!item.graded ? "none" : item.graded.correct ? "ok" : "bad"}>
-                    <span className="ticket">{number(q.id)}</span>
-                    <div>
-                      <Rich text={text(q.question, language)} />
-                      <p className="meta">{item.graded ? `${t("session.right")}: ${rightAnswer(q, language).join("; ")}` : t("result.unanswered")}</p>
-                    </div>
-                    {item.graded?.correct ? <Check size={18} strokeWidth={1.5} role="img" aria-label={t("session.correct")} /> : <X size={18} strokeWidth={1.5} role="img" aria-label={item.graded ? t("session.incorrect") : t("result.unanswered")} />}
+                    <details>
+                      <summary>
+                        <span className="ticket">{number(q.id)}</span>
+                        <div>
+                          <Rich text={text(q.question, language)} />
+                          <p className="meta">{item.graded ? `${t("session.right")}: ${rightAnswer(q, language).join("; ")}` : t("result.unanswered")}</p>
+                        </div>
+                        {item.graded?.correct ? <Check size={18} strokeWidth={1.5} role="img" aria-label={t("session.correct")} /> : <X size={18} strokeWidth={1.5} role="img" aria-label={item.graded ? t("session.incorrect") : t("result.unanswered")} />}
+                        <ChevronDown className="chev" size={18} strokeWidth={1.5} aria-hidden />
+                      </summary>
+                      <div className="review-more">
+                        <div className="reference">
+                          <p className="label">{t("result.yourAnswer")}</p>
+                          {item.response?.mode === "self_check" ? <p>{t(item.response.knew ? "session.knew" : "session.didNot")}</p>
+                            : given.length === 0 ? <p>{t("result.unanswered")}</p>
+                            : item.response?.mode === "choice" ? given.map((line, k) => <Rich key={k} text={line} />)
+                            : given.map((line, k) => <p key={k}>{line}</p>)}
+                        </div>
+                        <Reference q={q} language={language} lines={rightAnswer(q, language)} />
+                        {q.explanation && <Rich text={text(q.explanation, language)} />}
+                      </div>
+                    </details>
                   </li>
                 );
               })}
@@ -319,7 +367,9 @@ export function SessionScreen() {
         {wrong.length > 0 && <p className="meta">{t("bank.mistakes")}: {wrong.length}</p>}
         {repeats > 0 && <p className="meta">{t("result.repeated", { count: repeats })}</p>}
         <footer className="dock" ref={dockBar}>
-          <button className="button primary" onClick={leave}>{t("result.toBank")}</button>
+          <button className={again ? "button quiet" : "button primary"} onClick={leave}>{t("result.toBank")}</button>
+          {wrong.length > 0 && <button className="button" disabled={!ready} onClick={() => begin(another(mistakesSetup, wrong), false)}>{t("result.fixMistakes", { n: wrong.length })}</button>}
+          {again && <button className="button primary" disabled={!ready} onClick={() => begin(another(running!.setup!))}>{t("result.again")}</button>}
         </footer>
       </div>
     );
@@ -332,6 +382,26 @@ export function SessionScreen() {
   const locked = !exam && item.graded != null;
   const bookmarked = states.get(q.id)?.bookmarked ?? false;
   const unanswered = unansweredCount(session.items, drafts);
+  // The options in the order they are drawn: the digit keys count them on screen, so one array serves both.
+  const order = item.mode === "choice" && (q.type === "single_choice" || q.type === "multiple_choice") ? shuffled(q.options, q.id + (item.again ?? 0) * 997) : [];
+  keys.current = (e) => {
+    if (e.repeat) return;
+    const act = sessionKey({
+      code: e.code, key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey,
+      target: e.target as HTMLInputElement | null, dialogOpen: document.querySelector("dialog[open]") != null,
+    }, locked ? 0 : order.length);
+    if (!act) return;
+    // Cancelling the key also stops the browser's own Enter on a focused option from sending the form a second time.
+    e.preventDefault();
+    if (act === "primary") {
+      document.querySelector<HTMLButtonElement>(".dock .button.primary:not(:disabled):not([data-no-enter])")?.click();
+      return;
+    }
+    const picked = order[act.pick];
+    if (!picked) return;
+    const current = drafts[session.index]?.selected ?? (item.response?.mode === "choice" ? item.response.selected : []);
+    setDrafts((old) => ({ ...old, [session.index]: { ...old[session.index], selected: toggleChoice(current, picked.id, q.type === "single_choice") } }));
+  };
 
   const answer = (response: Response) => {
     const next = submit(session, q, response, Date.now(), options);
@@ -381,7 +451,7 @@ export function SessionScreen() {
         {fellBack(prompt, language) && <p className="meta">{t("session.shownIn")}: {language.toUpperCase()}</p>}
 
         <Answer
-          key={`${session.index}:${locked}`} q={q} item={item} language={language} locked={locked} exam={exam} dock={dock} onSubmit={answer}
+          key={`${session.index}:${locked}`} q={q} item={item} order={order} language={language} locked={locked} exam={exam} dock={dock} onSubmit={answer}
           draft={drafts[session.index] ?? {}} onDraft={(patch) => setDrafts((old) => ({ ...old, [session.index]: { ...old[session.index], ...patch } }))}
         />
         {locked && <Feedback q={q} item={item} language={language} bank={session.bank} attempt={attempts[session.index]} />}
