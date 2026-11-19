@@ -1,6 +1,6 @@
 import Dexie from "dexie";
 import { ContentClient, uuidv7, type Http, type KeyValue, type ProgressEvent } from "@exam/core";
-import { KEYS, isFirefox, isShell, parseSavedExam, pinnedBanks, setupOf, storeSetup, wipe, type SavedExam, type Setup } from "./lib.ts";
+import { KEYS, isFirefox, isShell, parseSavedExam, parseUnwritten, pinnedBanks, withUnwritten, withoutWritten, setupOf, storeSetup, wipe, type SavedExam, type Setup } from "./lib.ts";
 
 const db = new Dexie("exam-platform");
 db.version(1).stores({ kv: "", events: "id" });
@@ -205,6 +205,20 @@ export function saveExam(exam: SavedExam): void {
     // not kept
   }
 }
+/** Finished exams' answers not yet known to be in the log (see `parseUnwritten`). Without storage they live only in memory, as before. */
+export function loadUnwritten(): ProgressEvent[] {
+  return parseUnwritten(readKey(KEYS.unwritten));
+}
+function storeUnwritten(events: ProgressEvent[]): void {
+  try {
+    if (events.length) localStorage.setItem(KEYS.unwritten, JSON.stringify(events));
+    else localStorage.removeItem(KEYS.unwritten);
+  } catch {
+    // only in memory
+  }
+}
+export const keepUnwritten = (added: ProgressEvent[]) => storeUnwritten(withUnwritten(loadUnwritten(), added));
+export const dropWritten = (written: ProgressEvent[]) => storeUnwritten(withoutWritten(loadUnwritten(), written));
 export function clearSavedExam(): void {
   try {
     localStorage.removeItem(KEYS.exam);

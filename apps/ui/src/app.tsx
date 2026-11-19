@@ -5,7 +5,7 @@ import { BookOpen, Settings as SettingsIcon } from "lucide-react";
 import { mergeLogs, type BankBundle, type ContentIndex, type ProgressEvent, type Session } from "@exam/core";
 import type { Localized } from "@exam/schema";
 import { pick } from "@exam/schema/pick";
-import { applyTheme, clearSavedExam, client, loadEvents, loadSavedExam, loadSettings, persistOnClick, requestPersistence, saveEvents, saveExam, storeSettings, LOCALE_NAMES, UI_LOCALES, type Settings } from "./platform.ts";
+import { applyTheme, clearSavedExam, client, dropWritten, keepUnwritten, loadEvents, loadSavedExam, loadSettings, loadUnwritten, persistOnClick, requestPersistence, saveEvents, storeSettings, LOCALE_NAMES, UI_LOCALES, type Settings } from "./platform.ts";
 import ru from "./locales/ru.json";
 import kk from "./locales/kk.json";
 import en from "./locales/en.json";
@@ -16,7 +16,7 @@ import { SettingsScreen } from "./settings.tsx";
 import { Confirm, Select } from "./ui.tsx";
 import { useHome } from "./home.ts";
 import { takeBack } from "./back.ts";
-import { fitsBundle, holdExam, keptOnStart, showContent, stepAsync, type ContentShown, type Draft, type SavedExam, type Setup, type WriteState } from "./lib.ts";
+import { fitsBundle, holdExam, keptOnStart, showContent, stepAsync, type ContentShown, type Draft, type Setup, type WriteState } from "./lib.ts";
 
 const initial = loadSettings();
 /** Sets the theme before the first paint; the effect in Root takes over and stops this one's system listener. */
@@ -60,8 +60,6 @@ interface App {
   storePending(sessionId: string, events: ProgressEvent[]): Promise<boolean>;
   /** Writes the same events again after a failure. */
   retryPending(sessionId: string): void;
-  /** Keeps an exam in progress in storage; waits for the log write of an earlier exam, so that write is not overwritten (see `run`). */
-  keepExam(exam: SavedExam): void;
 }
 
 const Context = createContext<App>(null!);
@@ -126,29 +124,19 @@ export function Root() {
   const logReady = log !== "loading";
   const [writes, setWrites] = useState<Record<string, WriteState>>({});
   const unwritten = useRef(new Map<string, ProgressEvent[]>());
-  const flushing = useRef<Promise<unknown> | undefined>(undefined);
   const [saveFailed, setSaveFailed] = useState(false);
   const [running, setRunning] = useState<Running>();
   const [restoreFailed, setRestoreFailed] = useState(false);
   const content = useContent();
-  // Starting something while a finished exam's answers may not be in the log yet (a failed write, or one still going) writes them first: the key goes only
-  // once the log has them (`storePending`), and a new exam's own copy waits for that write (`keepExam`). Practice over an unfinished kept exam drops it.
+  // Starting something while a finished exam's answers may not be in the log yet (a failed write, or one still going) writes them first.
+  // Their copy lives apart (`KEYS.unwritten`, see `storePending`), so a new exam may take the exam key at once. Practice over an unfinished kept exam drops it.
   // The events are in memory (`put`) before any of this, so a write that fails still leaves them on screen and in the next export.
   const run = useCallback((next: Running | undefined) => {
     const kept = loadSavedExam();
     const action = keptOnStart(kept, next?.session);
     if (action === "clear") clearSavedExam();
-    else if (action === "flush") {
-      const write = storePending(kept!.session.id, kept!.pending!);
-      flushing.current = write;
-      void write.finally(() => { if (flushing.current === write) flushing.current = undefined; });
-    }
+    else if (action === "flush") void storePending(kept!.session.id, kept!.pending!);
     setRunning(next);
-  }, []);
-  const keepExam = useCallback((exam: SavedExam) => {
-    const waiting = flushing.current;
-    if (waiting) void waiting.then(() => saveExam(exam));
-    else saveExam(exam);
   }, []);
   const route = useRoute();
   const home = useHome();
@@ -176,6 +164,9 @@ export function Root() {
 
   // An exam that was open when the app closed or the page reloaded comes back as it was left: the clock kept running, so one that has run out ends at once.
   useEffect(() => {
+    // Answers of earlier exams whose write never got through (their exam key was taken by a newer exam since) are written now.
+    const left = loadUnwritten();
+    if (left.length) void commit(left).then((stored) => stored && dropWritten(left));
     const saved = loadSavedExam();
     if (!saved) return;
     // It had ended, and whether the log got its answers is not known: they are written again (the same events, so nothing doubles), the exam is not reopened.
@@ -267,11 +258,15 @@ export function Root() {
 
   const storePending = useCallback(async (sessionId: string, added: ProgressEvent[]) => {
     unwritten.current.set(sessionId, added);
+    keepUnwritten(added);
     setWrites((now) => ({ ...now, [sessionId]: "saving" }));
     const stored = await commit(added);
     // Only its own copy: by the time the log answers, another exam may have been started and kept.
     if (stored && loadSavedExam()?.session.id === sessionId) clearSavedExam();
-    if (stored) unwritten.current.delete(sessionId);
+    if (stored) {
+      unwritten.current.delete(sessionId);
+      dropWritten(added);
+    }
     setWrites((now) => ({ ...now, [sessionId]: stored ? "saved" : "failed" }));
     return stored;
   }, [commit]);
@@ -284,11 +279,11 @@ export function Root() {
     const wanted = settings.content === "auto" ? settings.ui : settings.content;
     const chain = [wanted, settings.ui];
     return {
-      settings, update, index: content.index, offline: content.offline, events, logReady, logRead: log === "read", append, commit, running, run, writes, storePending, retryPending, keepExam,
+      settings, update, index: content.index, offline: content.offline, events, logReady, logRead: log === "read", append, commit, running, run, writes, storePending, retryPending,
       text: (value, language = "ru") => (value == null ? "" : pick(value, chain, language).text),
       fellBack: (value, language) => pick(value, chain, language).locale !== wanted,
     };
-  }, [settings, update, content.index, content.offline, events, logReady, log, append, commit, running, run, writes, storePending, retryPending, keepExam]);
+  }, [settings, update, content.index, content.offline, events, logReady, log, append, commit, running, run, writes, storePending, retryPending]);
 
   let screen: ReactNode;
   if (path === "session" && running) screen = <SessionScreen key={running.session.id} />;

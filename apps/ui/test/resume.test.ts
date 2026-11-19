@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
 import katex from "katex";
-import type { Session, SessionItem } from "@exam/core";
+import type { ProgressEvent, Session, SessionItem } from "@exam/core";
 import {
-  KEYS, draftResponse, fitsBundle, keptOnStart, parseSavedExam, pinnedBanks, safeStyle, settleDrafts, unansweredCount, wipe, type SavedExam,
+  KEYS, draftResponse, fitsBundle, keptOnStart, parseSavedExam, parseUnwritten, pinnedBanks, withUnwritten, withoutWritten, safeStyle, settleDrafts, unansweredCount, wipe, type SavedExam,
 } from "../src/lib.ts";
 
 const T0 = 1_700_000_000_000;
@@ -177,5 +177,27 @@ describe("style attributes of formulas", () => {
     expect(safeStyle("behavior:red;z-index:9;content:'x';font-size:2em")).toBe("font-size:2em");
     expect(safeStyle("")).toBe("");
     expect(safeStyle(";;:;color")).toBe("");
+  });
+});
+
+describe("answers of ended exams that the log may not hold yet", () => {
+  const ev = (id: string) => ({ id, type: "attempt" as const, at: T0, bank: "b1", question: 1, correct: true, mode: "choice" as const }) as unknown as ProgressEvent;
+  test("a second failed write of exam A, then exam B taking the exam key, leaves A's answers in their own key", () => {
+    const a = [ev("a1"), ev("a2")];
+    let kept = withUnwritten([], a); // A ended, its write failed
+    kept = withUnwritten(kept, a); // the retry from starting B adds nothing twice
+    expect(kept).toEqual(a);
+    const b = [ev("b1")];
+    kept = withUnwritten(kept, b);
+    kept = withoutWritten(kept, b); // B got through, A still did not
+    expect(parseUnwritten(JSON.stringify(kept))).toEqual(a);
+    expect(withoutWritten(kept, a)).toEqual([]);
+  });
+  test("anything that is not a list of log events reads as nothing", () => {
+    for (const raw of [null, "", "{", "5", JSON.stringify({ 0: ev("x") })]) expect(parseUnwritten(raw)).toEqual([]);
+    expect(parseUnwritten(JSON.stringify([ev("x"), { id: "y" }, null]))).toEqual([ev("x")]);
+  });
+  test("the wipe clears this key too", () => {
+    expect(Object.values(KEYS)).toContain("unwritten");
   });
 });

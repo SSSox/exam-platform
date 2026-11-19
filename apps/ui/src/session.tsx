@@ -185,7 +185,7 @@ function Feedback({ q, item, language, bank, attempt }: { q: Question; item: Ses
 
 export function SessionScreen() {
   const { t } = useTranslation();
-  const { running, run, text, fellBack, events, append, commit, settings, writes, storePending, retryPending, keepExam } = useApp();
+  const { running, run, text, fellBack, events, append, commit, settings, writes, storePending, retryPending } = useApp();
   const { session, bundle, back, hash, line } = running!;
   const language = bundle.bank.language;
   const questions = useMemo(() => new Map(bundle.questions.map((q) => [q.id, q])), [bundle]);
@@ -218,8 +218,8 @@ export function SessionScreen() {
   const ending = useRef(false);
   /** The exam is kept in local storage from its first shown question to its end, so a reload, a closed window or a restarted app does not lose it. */
   useEffect(() => {
-    if (exam && !done && !ending.current) keepExam({ v: 1, session, drafts, back, line, hash });
-  }, [exam, done, session, drafts, back, line, hash, keepExam]);
+    if (exam && !done && !ending.current) saveExam({ v: 1, session, drafts, back, line, hash });
+  }, [exam, done, session, drafts, back, line, hash]);
   // Walking away from an exam with no answers yet is not held (see holdExam), so it is not kept either: the next launch must not open it again.
   // Only that one: an exam with answers leaves the screen unfinished when the page crashes, and a reload has to bring it back.
   // A reload or a closed app runs no cleanup.

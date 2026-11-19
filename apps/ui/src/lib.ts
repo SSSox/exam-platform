@@ -17,7 +17,7 @@ export const mistakeIds = (s: Pick<Session, "config" | "items" | "index">): numb
   shown(s).filter((i) => !i.again && (s.config.kind === "exam" ? !i.graded?.correct : i.graded != null && !i.graded.correct)).map((i) => i.question);
 
 /** The app's own keys in local storage. On a shared origin (a github.io site) any other key belongs to someone else. */
-export const KEYS = { settings: "settings", place: "place", device: "device", exam: "exam", updateCheck: "updateCheck", setup: "setup", backup: "backup" } as const;
+export const KEYS = { settings: "settings", place: "place", device: "device", exam: "exam", updateCheck: "updateCheck", setup: "setup", backup: "backup", unwritten: "unwritten" } as const;
 
 /**
  * Removes everything the app keeps on the device: the stored tables (the progress log, the downloaded banks) and its own keys in local storage.
@@ -196,6 +196,28 @@ export interface SavedExam { v: 1; session: Session; drafts: Record<number, Draf
 
 /** Where the log write of a finished exam's answers stands, by session id (see `storePending` in `app.tsx`). */
 export type WriteState = "saving" | "saved" | "failed";
+
+/**
+ * Finished exams' answers that the log may not hold yet, kept apart from the exam key (`KEYS.unwritten`): a new exam replaces that key,
+ * and a write that fails twice must not take the earlier answers with it. Merged by id, so writing them again doubles nothing.
+ */
+export function parseUnwritten(raw: string | null): ProgressEvent[] {
+  if (raw == null) return [];
+  try {
+    const x: unknown = JSON.parse(raw);
+    return Array.isArray(x) ? x.filter(isProgressEvent) : [];
+  } catch {
+    return [];
+  }
+}
+export function withUnwritten(kept: ProgressEvent[], added: ProgressEvent[]): ProgressEvent[] {
+  const ids = new Set(kept.map((e) => e.id));
+  return [...kept, ...added.filter((e) => !ids.has(e.id))];
+}
+export function withoutWritten(kept: ProgressEvent[], written: ProgressEvent[]): ProgressEvent[] {
+  const ids = new Set(written.map((e) => e.id));
+  return kept.filter((e) => !ids.has(e.id));
+}
 
 /**
  * What starting `next` does with the exam kept in storage: `flush` when the kept one has ended and its answers may not be in the log yet
