@@ -80,6 +80,10 @@ export class ContentClient {
    * Bank files are big, so only the last few used stay; node manifests are small and all stay.
    */
   private texts = new Map<string, string>();
+  /** Keys downloaded but not stored (no room, blocked storage): written again the next time the text is served from memory. */
+  private unstored = new Set<string>();
+  /** The snapshot index request in flight, so `stored()` and `index()` started together ask once. */
+  private shipping?: Promise<string | undefined>;
 
   constructor(bases: string[], http: Http, cache: KeyValue, options: ContentOptions = {}) {
     this.bases = bases;
@@ -134,7 +138,14 @@ export class ContentClient {
 
   private async shipped(): Promise<ContentIndex | undefined> {
     if (!this.snapshot) return undefined;
-    const text = await this.fromMirrors([this.snapshot], "index.json", this.timeouts.index, async (t) => isIndex(parse(t)));
+    if (!this.shipping) {
+      // Shared only while the request runs; success or failure, the next call goes to the network again (so "Retry" really retries).
+      const request = this.fromMirrors([this.snapshot], "index.json", this.timeouts.index, async (t) => isIndex(parse(t))).finally(() => {
+        if (this.shipping === request) this.shipping = undefined;
+      });
+      this.shipping = request;
+    }
+    const text = await this.shipping;
     return text ? JSON.parse(text) : undefined;
   }
 
@@ -244,7 +255,10 @@ export class ContentClient {
     this.texts.set(key, text);
     if (!key.startsWith("banks/")) return;
     const banks = [...this.texts.keys()].filter((k) => k.startsWith("banks/"));
-    for (const old of banks.slice(0, Math.max(0, banks.length - BANKS_KEPT))) this.texts.delete(old);
+    for (const old of banks.slice(0, Math.max(0, banks.length - BANKS_KEPT))) {
+      this.texts.delete(old);
+      this.unstored.delete(old);
+    }
   }
 
   private async blob<T>(folder: string, hash: string): Promise<T> {
@@ -252,6 +266,7 @@ export class ContentClient {
     const held = this.texts.get(key);
     if (held !== undefined) {
       this.remember(key, held);
+      if (this.unstored.delete(key)) void this.store(key, held).then((ok) => ok || this.unstored.add(key));
       return JSON.parse(held) as T;
     }
     const stored = await this.read(key);
@@ -276,7 +291,7 @@ export class ContentClient {
     const sources = this.snapshot ? [this.snapshot, ...this.bases] : this.bases;
     const text = await this.fromMirrors(sources, `${key}.json`, this.timeouts.file, async (t) => (await sha256(t)) === hash);
     if (!text) throw new Error(`cannot load ${key}`);
-    await this.store(key, text);
+    if (!(await this.store(key, text))) this.unstored.add(key);
     return text;
   }
 

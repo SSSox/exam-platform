@@ -454,3 +454,47 @@ describe("files read in this run", () => {
     expect(reads.filter((k) => k === `banks/${hashes[0]}`)).toHaveLength(2);
   });
 });
+
+describe("the shipped snapshot request", () => {
+  test("stored() and index() started together ask for the snapshot once", async () => {
+    const http = web({ [`${SHIPPED}/index.json`]: index("v0") });
+    const client = new ContentClient([], http, memory(), { snapshot: SHIPPED });
+    const [stored, current] = await Promise.all([client.stored(), client.index()]);
+    expect(stored?.version).toBe("v0");
+    expect(current.index.version).toBe("v0");
+    expect(http.asked).toEqual([`${SHIPPED}/index.json`]);
+  });
+
+  test("a finished request is not reused: after a failure the next call asks again", async () => {
+    const files: Record<string, string> = {};
+    const http = web(files);
+    const client = new ContentClient([], http, memory(), { snapshot: SHIPPED });
+    await expect(client.index()).rejects.toThrow();
+    files[`${SHIPPED}/index.json`] = index("v0");
+    expect((await client.index()).index.version).toBe("v0");
+    expect(http.asked).toHaveLength(2);
+    await client.index();
+    expect(http.asked).toHaveLength(3);
+  });
+});
+
+describe("a file that could not be stored", () => {
+  test("is written again the next time it is served from memory", async () => {
+    const text = manifest("n", [], []);
+    const hash = await sha256(text);
+    const cache = memory();
+    let failing = true;
+    const set = cache.set;
+    cache.set = async (key, value) => {
+      if (failing) throw new Error("quota");
+      return set(key, value);
+    };
+    const client = new ContentClient([REMOTE], web({ [`${REMOTE}/nodes/${hash}.json`]: text }), cache);
+    expect((await client.node(hash)).id).toBe("n");
+    expect(cache.map.has(`nodes/${hash}`)).toBe(false);
+    failing = false;
+    expect((await client.node(hash)).id).toBe("n");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(cache.map.get(`nodes/${hash}`)).toBe(text);
+  });
+});

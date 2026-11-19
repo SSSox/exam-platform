@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { precacheList, shellVersion, workerSource } from "../scripts/worker.ts";
-import { shouldRegisterWorker } from "../src/pwa.ts";
+import { reloadAllowed, shouldRegisterWorker } from "../src/pwa.ts";
 
 const build = [
   "index.html",
@@ -9,6 +9,7 @@ const build = [
   "icon.svg",
   "icon-192.png",
   "icon-512.png",
+  "icon-maskable-512.png",
   "apple-touch-icon.png",
   "assets/index-AAA.js",
   "assets/index-BBB.css",
@@ -38,6 +39,7 @@ describe("precacheList", () => {
       "icon.svg",
       "icon-192.png",
       "icon-512.png",
+      "icon-maskable-512.png",
       "apple-touch-icon.png",
     ]);
   });
@@ -76,8 +78,8 @@ describe("workerSource", () => {
     expect(text).toContain('"abc123"');
     for (const f of list) expect(text).toContain(JSON.stringify(f));
   });
-  it("never takes over early", () => {
-    expect(text).not.toMatch(/skipWaiting\(|clients\.claim\(/);
+  it("never claims clients (skipWaiting is covered by worker.test.ts)", () => {
+    expect(text).not.toMatch(/clients\.claim\(/);
   });
 });
 
@@ -100,5 +102,17 @@ describe("shouldRegisterWorker", () => {
   it("keeps the shell and prod gates even with the flag", () => {
     expect(shouldRegisterWorker({ ...ok, shell: true, search: "?sw" })).toBe(false);
     expect(shouldRegisterWorker({ ...ok, prod: false, protocol: "http:", search: "?sw" })).toBe(false);
+  });
+});
+
+describe("reloadAllowed", () => {
+  it("reloads at once the first time and not again within ten seconds", () => {
+    expect(reloadAllowed(null, 1000)).toBe(true);
+    expect(reloadAllowed(1000, 5000)).toBe(false);
+    expect(reloadAllowed(1000, 11_000)).toBe(true);
+  });
+  it("ignores a garbage or future mark", () => {
+    expect(reloadAllowed(Number.NaN, 1000)).toBe(true);
+    expect(reloadAllowed(9000, 1000)).toBe(true);
   });
 });

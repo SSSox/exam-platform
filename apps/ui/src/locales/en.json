@@ -81,6 +81,7 @@
     "noResults": "Nothing found",
     "results": "Questions found",
     "likeExam": "Like the exam",
+    "byLevels": "by difficulty levels",
     "history": "Mock exams",
     "examScore": "{{correct}} of {{total}}"
   },
@@ -231,6 +232,10 @@
     "failedNetwork": "Can't reach GitHub, check the internet connection",
     "failedCheck": "The update failed the check. Download the new version from GitHub by hand",
     "retry": "Check again"
+  },
+  "site": {
+    "updateReady": "A new version of the site is ready",
+    "updateApply": "Update"
   },
   "crash": {
     "title": "Something went wrong",

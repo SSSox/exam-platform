@@ -8,11 +8,11 @@ import { createHash } from "node:crypto";
 /** The page itself: the scope URL. `index.html` is the same resource and is cached once under this name. */
 export const PAGE = "./";
 
-/** Prefix of the shell caches. The origin is shared with other sites, so only names with this prefix are ever deleted. */
+/** Prefix of the shell caches. The origin is shared with other sites and other copies of this app, so only names of this scope are ever deleted. */
 export const CACHE_PREFIX = "exam-trainer-shell-";
 
 /** Files from `public/` that belong to the shell. */
-const STATIC = ["manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
+const STATIC = ["manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"];
 
 /**
  * What goes into the precache, as URLs relative to the worker. Every script and style under `assets/`, lazy chunks included
@@ -42,7 +42,6 @@ export function workerSource(list: readonly string[], version: string): string {
 "use strict";
 
 const CACHE_PREFIX = ${JSON.stringify(CACHE_PREFIX)};
-const CACHE = CACHE_PREFIX + ${JSON.stringify(version)};
 const FILES = ${JSON.stringify(list, null, 2)};
 
 // Everything is resolved against the scope: the site lives under a sub-path and the same build can run from any folder.
@@ -51,19 +50,58 @@ const URLS = new Set(FILES.map((f) => new URL(f, SCOPE).href));
 const PAGE = new URL(${JSON.stringify(PAGE)}, SCOPE).href;
 const KATEX_FONTS = SCOPE + "assets/KaTeX_";
 
-// No skipWaiting and no clients.claim calls: a new version takes over only once the pages of the old one are closed,
-// so a running page never sees a mix of two builds.
-self.addEventListener("install", (event) => {
-  // addAll is atomic: if any file fails, the install fails and the previous worker stays in charge.
-  // "reload" skips the HTTP cache, which could otherwise hand over a stale page or icon. Files under assets/ carry a content hash in
-  // their names, so the copy the browser already has is the right one and a new version downloads only what changed.
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES.map((f) => new Request(new URL(f, SCOPE).href, { cache: f.startsWith("assets/") ? "default" : "reload" })))));
+// Another copy of the app (a fork under another path) can live on this origin: the cache name carries a short hash of the scope path.
+function hashOf(text) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  return h.toString(16).padStart(8, "0");
+}
+const OWN = CACHE_PREFIX + hashOf(new URL(SCOPE).pathname) + "-";
+const CACHE = OWN + ${JSON.stringify(version)};
+// Older scheme: the prefix and the 12-hex version only, with no scope in the name.
+const LEGACY = new RegExp("^" + CACHE_PREFIX + "[0-9a-f]{12}$");
+
+// No clients.claim, and skipWaiting only when the page asks (the "Update" button sends {type: "activate"}): a new version never takes
+// over by itself, so a running page never sees a mix of two builds.
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "activate") self.skipWaiting();
 });
 
+self.addEventListener("install", (event) => event.waitUntil(install()));
+
+// Like cache.addAll (all or nothing, a non-2xx answer fails) plus a check that the page the host handed over matches this list.
+// Nothing is written to the cache until everything is downloaded and checked; on a failure the install fails and the old worker stays.
+async function install() {
+  // no-cache is a conditional request (304 when unchanged), so a file the browser has just downloaded is not downloaded again; the hash in
+  // the names under assets/ makes any copy the browser already has the right one.
+  const responses = await Promise.all(
+    FILES.map((f) => {
+      const url = new URL(f, SCOPE).href;
+      return fetch(new Request(url, { cache: f.startsWith("assets/") ? "default" : "no-cache" })).then((response) => {
+        if (!response.ok) throw new Error(response.status + " " + url);
+        return response;
+      });
+    }),
+  );
+  // A stale CDN node can serve the old page next to the new worker: its scripts would not be in this list.
+  const html = await responses[FILES.indexOf(${JSON.stringify(PAGE)})].clone().text();
+  for (const match of html.matchAll(/<(?:script|link)\\b[^>]*?\\b(?:src|href)\\s*=\\s*["']?([^"'\\s>]+)/gi)) {
+    const href = new URL(match[1], PAGE).href;
+    if (href.startsWith(SCOPE + "assets/") && !URLS.has(href)) throw new Error("the page uses a file that is not in the list: " + href);
+  }
+  try {
+    const cache = await caches.open(CACHE);
+    await Promise.all(FILES.map((f, i) => cache.put(new URL(f, SCOPE).href, responses[i])));
+  } catch (error) {
+    await caches.delete(CACHE);
+    throw error;
+  }
+}
+
 self.addEventListener("activate", (event) => {
-  // Cache Storage is shared by every site on this origin: touch only our own older versions.
+  // Cache Storage is shared by every site on this origin: touch only this scope's older versions and the old unscoped names.
   event.waitUntil(
-    caches.keys().then((names) => Promise.all(names.filter((n) => n.startsWith(CACHE_PREFIX) && n !== CACHE).map((n) => caches.delete(n)))),
+    caches.keys().then((names) => Promise.all(names.filter((n) => n !== CACHE && (n.startsWith(OWN) || LEGACY.test(n))).map((n) => caches.delete(n)))),
   );
 });
 

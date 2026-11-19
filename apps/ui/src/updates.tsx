@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
-import { Download } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
+import { applySiteUpdate, useSiteUpdate } from "./pwa.ts";
 import { KEYS, isCheckDone, isUpdateDue, readUpdateState, type UpdateState } from "./lib.ts";
 
 /**
@@ -213,6 +214,20 @@ export function UpdateLine() {
           <button className="button quiet" onClick={action.run}><Download size={18} strokeWidth={1.5} aria-hidden />{action.label}</button>
         </span>
       )}
+    </p>
+  );
+}
+
+/** A quiet line for the web page: a new version of the site is installed and waits. Nothing happens until the button is pressed. */
+export function SiteUpdateLine() {
+  const { t } = useTranslation();
+  if (!useSiteUpdate()) return null;
+  return (
+    <p className="get-app" role="status">
+      <span>{t("site.updateReady")}</span>
+      <span className="get-app-links">
+        <button className="button quiet" onClick={applySiteUpdate}><RefreshCw size={18} strokeWidth={1.5} aria-hidden />{t("site.updateApply")}</button>
+      </span>
     </p>
   );
 }

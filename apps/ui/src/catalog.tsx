@@ -9,7 +9,7 @@ import { forgetHome, rememberHome } from "./home.ts";
 import { Stops, stopsOf } from "./stops.tsx";
 import { useMinute } from "./ui.tsx";
 import { DownloadLine } from "./downloads.tsx";
-import { UpdateLine } from "./updates.tsx";
+import { SiteUpdateLine, UpdateLine } from "./updates.tsx";
 import { STATIONS, backupDue, bankProgress, changeTarget, dueCount, homeOf, lineOf, namesLine, pathNames, sharedKind, shortTitle, stationsOf, type Station } from "./lib.ts";
 
 export const load = (ref: NodeRef) => client.node(ref.hash);
@@ -87,6 +87,7 @@ export function NodeScreen({ path }: { path: string }) {
         {isPlace && <h2 className="sec">{t("catalog.title")}</h2>}
         {entries.length ? <Rows entries={entries} node={node} /> : <p className="muted">{t("state.empty")}</p>}
         <UpdateLine />
+        <SiteUpdateLine />
         <BackupLine />
         <DownloadLine />
       </div>
