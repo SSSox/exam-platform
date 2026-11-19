@@ -1,4 +1,4 @@
-import { LEARNED_BOX, entriesOf, goTo, isFork, strength, submit, type BankBundle, type Entry, type NodeManifest, type NodeRef, type ProgressEvent, type QuestionState, type Response, type Session, type SessionItem, type Target } from "@exam/core";
+import { LEARNED_BOX, entriesOf, goTo, isFork, strength, submit, type BankBundle, type ContentIndex, type Entry, type NodeManifest, type NodeRef, type ProgressEvent, type QuestionState, type Response, type Session, type SessionItem, type Target } from "@exam/core";
 
 /**
  * What the result counts as shown. An exam counts every question, answered or not. Practice moves only forward, so an item behind
@@ -124,6 +124,24 @@ export function holdExam(unsaved: boolean, path: string, heading: string | undef
   if (!unsaved) return { heading: undefined, stay: false };
   if (path === "session") return { heading, stay: false };
   return { heading: heading ?? address, stay: true };
+}
+
+/** What the app shows of the content index: `offline` only after the network was asked and did not answer. */
+export interface ContentShown { index?: ContentIndex; offline: boolean; error?: unknown }
+export type ContentStep = { stored: ContentIndex | undefined } | { fresh: ContentIndex; offline: boolean } | { failed: unknown };
+
+/**
+ * The index the device holds is shown at once and the network answer replaces it. The same version keeps the same object:
+ * screens have effects that depend on the identity of `index`, and a copy would repeat them.
+ */
+export function showContent(now: ContentShown, step: ContentStep): ContentShown {
+  if ("stored" in step) {
+    if (now.index || !step.stored) return now;
+    return { index: step.stored, offline: now.error != null };
+  }
+  if ("failed" in step) return now.index ? (now.offline && now.error == null ? now : { index: now.index, offline: true }) : { offline: false, error: step.failed };
+  const index = now.index?.version === step.fresh.version ? now.index : step.fresh;
+  return index === now.index && step.offline === now.offline && now.error == null ? now : { index, offline: step.offline };
 }
 
 /** What the learner has picked or typed on a question but not sent yet; kept by the screen so leaving the question and coming back loses nothing. */

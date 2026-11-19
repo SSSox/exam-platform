@@ -28,6 +28,8 @@ export interface ContentOptions {
 }
 
 export const HASH_LENGTH = 16;
+/** How many bank files (up to ~650 KB of text each) a client keeps in memory. */
+const BANKS_KEPT = 3;
 
 export async function sha256(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -72,6 +74,12 @@ export class ContentClient {
   private accepting = new Map<string, Promise<void>>();
   /** Hashed files being downloaded right now, by cache key. */
   private loading = new Map<string, Promise<string>>();
+  /**
+   * Text of files already read in this run, by cache key, so a screen change does not read the store again. Only `blob` looks here:
+   * `read`, `isCached`, `accept` and `tidy` must see what is really stored (a file in memory may have failed to store).
+   * Bank files are big, so only the last few used stay; node manifests are small and all stay.
+   */
+  private texts = new Map<string, string>();
 
   constructor(bases: string[], http: Http, cache: KeyValue, options: ContentOptions = {}) {
     this.bases = bases;
@@ -128,6 +136,22 @@ export class ContentClient {
     if (!this.snapshot) return undefined;
     const text = await this.fromMirrors([this.snapshot], "index.json", this.timeouts.index, async (t) => isIndex(parse(t)));
     return text ? JSON.parse(text) : undefined;
+  }
+
+  /**
+   * The index the device already holds, without a request to a network mirror: the stored one, else the snapshot shipped with the app
+   * (with no mirrors, the shipped content only). Writes nothing and never throws; the app shows it while `index()` asks the network.
+   */
+  async stored(): Promise<ContentIndex | undefined> {
+    try {
+      if (this.bases.length > 0) {
+        const cached = parse(await this.read("index"));
+        if (isIndex(cached)) return cached;
+      }
+      return await this.shipped();
+    } catch {
+      return undefined;
+    }
   }
 
   /**
@@ -214,17 +238,37 @@ export class ContentClient {
     }
   }
 
+  /** Keeps `text` in memory; of the bank files only the last `BANKS_KEPT` used (a Map iterates in insertion order, so a re-insert marks use). */
+  private remember(key: string, text: string): void {
+    this.texts.delete(key);
+    this.texts.set(key, text);
+    if (!key.startsWith("banks/")) return;
+    const banks = [...this.texts.keys()].filter((k) => k.startsWith("banks/"));
+    for (const old of banks.slice(0, Math.max(0, banks.length - BANKS_KEPT))) this.texts.delete(old);
+  }
+
   private async blob<T>(folder: string, hash: string): Promise<T> {
     const key = `${folder}/${hash}`;
-    const cached = parse(await this.read(key));
-    if (cached !== undefined) return cached as T;
+    const held = this.texts.get(key);
+    if (held !== undefined) {
+      this.remember(key, held);
+      return JSON.parse(held) as T;
+    }
+    const stored = await this.read(key);
+    const cached = parse(stored);
+    if (cached !== undefined) {
+      this.remember(key, stored!);
+      return cached as T;
+    }
     // Screens that ask for the same file at once share one download; each gets its own parsed copy.
     let text = this.loading.get(key);
     if (!text) {
       text = this.download(key, hash).finally(() => this.loading.delete(key));
       this.loading.set(key, text);
     }
-    return JSON.parse(await text);
+    const loaded = await text;
+    this.remember(key, loaded);
+    return JSON.parse(loaded);
   }
 
   private async download(key: string, hash: string): Promise<string> {

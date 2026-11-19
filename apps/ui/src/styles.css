@@ -157,6 +157,7 @@ input:disabled { cursor: default; }
 .main-session { max-width: none; padding-top: calc(8px + var(--inset-top)); }
 .sheet { max-width: 720px; margin: 0 auto; display: grid; gap: 16px; }
 .sheet > *, .question > * { min-width: 0; }
+.status.waiting { animation: fade 200ms var(--out) 300ms backwards; }
 .status { display: grid; gap: 12px; justify-items: start; padding: 48px 8px; color: var(--ink-2); }
 
 /* Buttons and pills */

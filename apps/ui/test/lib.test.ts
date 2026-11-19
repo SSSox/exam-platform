@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { learn, type BankRef, type Entry, type NodeManifest, type NodeRef, type QuestionState, type Session, type SessionItem } from "@exam/core";
-import { KEYS, STATIONS, bankProgress, changeTarget, homeOf, holdExam, isProgressEvent, lineOf, namesLine, pageAbove, pathNames, sharedKind, shown, shortTitle, stationsOf, wipe } from "../src/lib.ts";
+import { learn, type BankRef, type ContentIndex, type Entry, type NodeManifest, type NodeRef, type QuestionState, type Session, type SessionItem } from "@exam/core";
+import { KEYS, STATIONS, bankProgress, changeTarget, homeOf, holdExam, showContent, isProgressEvent, lineOf, namesLine, pageAbove, pathNames, sharedKind, shown, shortTitle, stationsOf, wipe } from "../src/lib.ts";
 
 /** Names are joined with a dot that stays on the line of the name before it. */
 const dots = (...names: string[]) => names.join(" · ");
@@ -252,5 +252,52 @@ describe("what the result counts as shown", () => {
   test("an exam counts every question, unanswered ones included", () => {
     const s = session("exam", [item(1, right), item(2), item(3)], 0);
     expect(ids(shown(s))).toEqual(["1", "2", "3"]);
+  });
+});
+
+describe("showContent", () => {
+  const idx = (version: string) => ({ format: "exambank/2", version, kinds: {}, roots: [] }) as ContentIndex;
+  const empty = { offline: false };
+
+  test("the stored index is shown at once and does not say offline", () => {
+    const a = idx("a");
+    expect(showContent(empty, { stored: a })).toEqual({ index: a, offline: false });
+  });
+
+  test("a stored index that comes after the network answer, or nothing stored, changes nothing", () => {
+    const now = { index: idx("new"), offline: false };
+    expect(showContent(now, { stored: idx("old") })).toBe(now);
+    expect(showContent(empty, { stored: undefined })).toBe(empty);
+  });
+
+  test("a stored index that comes after a failure is shown as offline and clears the error", () => {
+    const a = idx("a");
+    expect(showContent({ offline: false, error: new Error("x") }, { stored: a })).toEqual({ index: a, offline: true });
+  });
+
+  test("a fresh index of the same version keeps the same object", () => {
+    const a = idx("a");
+    const now = { index: a, offline: false };
+    expect(showContent(now, { fresh: idx("a"), offline: false })).toBe(now);
+    expect(showContent(now, { fresh: idx("a"), offline: true }).index).toBe(a);
+    expect(showContent(now, { fresh: idx("a"), offline: true }).offline).toBe(true);
+  });
+
+  test("a fresh index of another version replaces the shown one at once", () => {
+    const b = idx("b");
+    expect(showContent({ index: idx("a"), offline: true }, { fresh: b, offline: false })).toEqual({ index: b, offline: false });
+    expect(showContent(empty, { fresh: b, offline: false }).index).toBe(b);
+  });
+
+  test("a fresh index clears an error", () => {
+    const a = idx("a");
+    expect(showContent({ index: a, offline: false, error: 1 }, { fresh: a, offline: false })).toEqual({ index: a, offline: false });
+  });
+
+  test("a failure keeps the shown index and says offline; without one it is an error", () => {
+    const a = idx("a");
+    expect(showContent({ index: a, offline: false }, { failed: new Error("x") })).toEqual({ index: a, offline: true });
+    const error = new Error("x");
+    expect(showContent(empty, { failed: error })).toEqual({ offline: false, error });
   });
 });

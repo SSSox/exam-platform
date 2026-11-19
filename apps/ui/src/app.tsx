@@ -16,7 +16,7 @@ import { SettingsScreen } from "./settings.tsx";
 import { Confirm, Select } from "./ui.tsx";
 import { useHome } from "./home.ts";
 import { takeBack } from "./back.ts";
-import { fitsBundle, holdExam, type Draft } from "./lib.ts";
+import { fitsBundle, holdExam, showContent, type ContentShown, type Draft } from "./lib.ts";
 
 const initial = loadSettings();
 /** Sets the theme before the first paint; the effect in Root takes over and stops this one's system listener. */
@@ -59,8 +59,9 @@ export function useAsync<T>(load: () => Promise<T>, deps: unknown[]): { data?: T
   const [tick, setTick] = useState(0);
   useEffect(() => {
     let live = true;
-    setState({});
-    load().then((data) => live && setState({ data }), (error) => live && setState({ error }));
+    // What was loaded before stays on screen while the new load runs, and after it fails.
+    setState((now) => (now.error == null ? now : { data: now.data }));
+    load().then((data) => live && setState({ data }), (error) => live && setState((now) => ({ data: now.data, error })));
     return () => void (live = false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, tick]);
@@ -70,11 +71,25 @@ export function useAsync<T>(load: () => Promise<T>, deps: unknown[]): { data?: T
 export function Status({ error, reload }: { error?: unknown; reload?: () => void }) {
   const { t } = useTranslation();
   return (
-    <div className="status" role="status">
+    <div className={error ? "status" : "status waiting"} role="status">
       <p>{error ? t("state.error") : t("state.loading")}</p>
       {error != null && reload && <button className="button" onClick={reload}>{t("state.retry")}</button>}
     </div>
   );
+}
+
+/** Shows the index the device holds at once and replaces it with the network's answer (see `showContent`). */
+function useContent(): ContentShown & { reload(): void } {
+  const [shown, setShown] = useState<ContentShown>({ offline: false });
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let live = true;
+    const step = (next: Parameters<typeof showContent>[1]) => live && setShown((now) => showContent(now, next));
+    void client.stored().then((stored) => step({ stored }));
+    client.index().then(({ index, offline }) => step({ fresh: index, offline }), (failed) => step({ failed }));
+    return () => void (live = false);
+  }, [tick]);
+  return { ...shown, reload: () => { setShown((now) => ({ ...now, error: undefined })); setTick((n) => n + 1); } };
 }
 
 const useRoute = () => {
@@ -95,7 +110,7 @@ export function Root() {
   const [saveFailed, setSaveFailed] = useState(false);
   const [running, setRunning] = useState<Running>();
   const [restoreFailed, setRestoreFailed] = useState(false);
-  const content = useAsync(() => client.index(), []);
+  const content = useContent();
   // Starting anything but an exam drops the kept one; an exam is kept (and ended) by the session screen.
   const run = useCallback((next: Running | undefined) => {
     if (next && next.session.config.kind !== "exam") clearSavedExam();
@@ -210,16 +225,16 @@ export function Root() {
     const wanted = settings.content === "auto" ? settings.ui : settings.content;
     const chain = [wanted, settings.ui];
     return {
-      settings, update, index: content.data?.index, offline: content.data?.offline ?? false, events, append, commit, running, run,
+      settings, update, index: content.index, offline: content.offline, events, append, commit, running, run,
       text: (value, language = "ru") => (value == null ? "" : pick(value, chain, language).text),
       fellBack: (value, language) => pick(value, chain, language).locale !== wanted,
     };
-  }, [settings, update, content.data, events, append, commit, running, run]);
+  }, [settings, update, content.index, content.offline, events, append, commit, running, run]);
 
   let screen: ReactNode;
   if (path === "session" && running) screen = <SessionScreen key={running.session.id} />;
   else if (path === "settings") screen = <SettingsScreen />;
-  else if (!content.data) screen = <Status error={content.error} reload={content.reload} />;
+  else if (!content.index) screen = <Status error={content.error} reload={content.reload} />;
   else if (path === "bank") screen = <BankScreen node={route.query.get("node") ?? ""} bank={route.query.get("id") ?? ""} />;
   else if (path.startsWith("n/")) screen = <NodeScreen path={path.slice(2)} />;
   else screen = <HomeScreen />;

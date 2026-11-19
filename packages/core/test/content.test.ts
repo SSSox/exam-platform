@@ -362,3 +362,95 @@ describe("accepting a fresh index", () => {
     expect([...cache.map.keys()].sort()).toEqual(["banks/b1", "banks/b2", "index", "nodes/r2"]);
   });
 });
+
+describe("what the device holds", () => {
+  const hangs: Http & { asked: string[] } = Object.assign({ get: () => new Promise<string>(() => {}) } as Http, { asked: [] as string[] });
+
+  test("stored() gives the stored index without asking the network, and writes nothing", async () => {
+    const cache = memory({ index: index("v1") });
+    const calls: string[] = [];
+    const http: Http = { get: (url) => (calls.push(url), hangs.get(url)) };
+    const client = new ContentClient([REMOTE], http, cache, { snapshot: SHIPPED });
+    expect((await client.stored())?.version).toBe("v1");
+    expect(calls.filter((u) => u.startsWith(REMOTE))).toEqual([]);
+    expect([...cache.map.keys()]).toEqual(["index"]);
+  });
+
+  test("stored() falls back to the shipped snapshot, then to nothing", async () => {
+    const cache = memory();
+    const withSnapshot = new ContentClient([REMOTE], web({ [`${SHIPPED}/index.json`]: index("v0") }), cache, { snapshot: SHIPPED });
+    expect((await withSnapshot.stored())?.version).toBe("v0");
+    expect(cache.map.size).toBe(0);
+    expect(await new ContentClient([REMOTE], web({}), memory(), { snapshot: SHIPPED }).stored()).toBeUndefined();
+    expect(await new ContentClient([REMOTE], web({}), memory()).stored()).toBeUndefined();
+  });
+
+  test("with no mirrors stored() is the shipped content", async () => {
+    const client = new ContentClient([], web({ [`${SHIPPED}/index.json`]: index("v0") }), memory({ index: index("v1") }), { snapshot: SHIPPED });
+    expect((await client.stored())?.version).toBe("v0");
+  });
+});
+
+describe("files read in this run", () => {
+  const counted = (cache: ReturnType<typeof memory>) => {
+    const reads: string[] = [];
+    const get = cache.get;
+    cache.get = async (key) => (reads.push(key), get(key));
+    return reads;
+  };
+
+  test("a second call does not read the store again and returns an independent copy", async () => {
+    const text = manifest("n", [], []);
+    const hash = await sha256(text);
+    const cache = memory({ [`nodes/${hash}`]: text });
+    const reads = counted(cache);
+    const client = new ContentClient([REMOTE], web({}), cache);
+    const first = await client.node(hash);
+    first.id = "changed";
+    const second = await client.node(hash);
+    expect(second.id).toBe("n");
+    expect(reads.filter((k) => k === `nodes/${hash}`)).toHaveLength(1);
+  });
+
+  test("a downloaded file is kept too", async () => {
+    const text = manifest("n", [], []);
+    const hash = await sha256(text);
+    const cache = memory();
+    const reads = counted(cache);
+    const client = new ContentClient([REMOTE], web({ [`${REMOTE}/nodes/${hash}.json`]: text }), cache);
+    await client.node(hash);
+    await client.node(hash);
+    expect(reads.filter((k) => k === `nodes/${hash}`)).toHaveLength(1);
+  });
+
+  test("a file that could not be stored is served from memory but still counts as not stored", async () => {
+    const text = JSON.stringify({ bank: { id: "b" }, questions: [] });
+    const hash = await sha256(text);
+    const cache = memory();
+    cache.set = async () => { throw new Error("quota"); };
+    const client = new ContentClient([REMOTE], web({ [`${REMOTE}/banks/${hash}.json`]: text }), cache);
+    expect((await client.bank(hash)).bank).toMatchObject({ id: "b" });
+    expect((await client.bank(hash)).bank).toMatchObject({ id: "b" });
+    expect(await client.isCached("banks", hash)).toBe(false);
+  });
+
+  test("only the last 3 bank files stay in memory", async () => {
+    const files: Record<string, string> = {};
+    const hashes: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const text = JSON.stringify({ bank: { id: `b${i}` }, questions: [] });
+      hashes.push(await sha256(text));
+      files[`banks/${hashes[i]}`] = text;
+    }
+    const cache = memory(files);
+    const reads = counted(cache);
+    const client = new ContentClient([REMOTE], web({}), cache);
+    for (const hash of hashes) await client.bank(hash);
+    await client.bank(hashes[3]!);
+    await client.bank(hashes[1]!);
+    expect(reads.filter((k) => k === `banks/${hashes[3]}`)).toHaveLength(1);
+    expect(reads.filter((k) => k === `banks/${hashes[1]}`)).toHaveLength(1);
+    await client.bank(hashes[0]!);
+    expect(reads.filter((k) => k === `banks/${hashes[0]}`)).toHaveLength(2);
+  });
+});
