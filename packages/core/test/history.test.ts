@@ -68,6 +68,12 @@ describe("exam history", () => {
     expect(examHistory(log, "b")[0]).toMatchObject({ correct: 1, of: 4, percent: 38 });
   });
 
+  test("a score outside 0..1 from an imported log is held to the range, so the percent is never below 0 or above 100", () => {
+    const log: ProgressEvent[] = [ev("a", "s", 1, false, { score: -5 }), ev("b", "s", 2, true, { score: 9 })];
+    expect(examHistory(log, "b")[0]).toMatchObject({ correct: 1, percent: 25 });
+    expect(examHistory([ev("a", "t", 1, false, { score: -50 })], "b")[0]!.percent).toBe(0);
+  });
+
   test("the percent equals summarize() of the same session, with partial credit", () => {
     const multi = Question.parse({
       id: 1, topic_id: 1, type: "multiple_choice", question: "Q",

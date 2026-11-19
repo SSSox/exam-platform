@@ -42,9 +42,12 @@ function watch(reg: ServiceWorkerRegistration): void {
   });
 }
 
-/** Whether a failed lazy chunk should reload the page: not when the page already reloaded for this a moment ago (a loop). */
-export function reloadAllowed(last: number | null, now: number, span = 10_000): boolean {
-  return last == null || !Number.isFinite(last) || now - last >= span || now < last;
+/**
+ * Whether a failed lazy chunk should reload the page: not when the page already reloaded for this a moment ago (a loop),
+ * and not offline, where the chunk is missing for want of a network and a reload could only show the browser's offline page.
+ */
+export function reloadAllowed(last: number | null, now: number, online = true, span = 10_000): boolean {
+  return online && (last == null || !Number.isFinite(last) || now - last >= span || now < last);
 }
 
 /**
@@ -54,7 +57,7 @@ export function reloadAllowed(last: number | null, now: number, span = 10_000): 
 export function reloadOnChunkError(event: Event): void {
   try {
     const raw = sessionStorage.getItem(CHUNK_RELOAD);
-    if (!reloadAllowed(raw == null ? null : Number(raw), Date.now())) return;
+    if (!reloadAllowed(raw == null ? null : Number(raw), Date.now(), navigator.onLine !== false)) return;
     sessionStorage.setItem(CHUNK_RELOAD, String(Date.now()));
   } catch {
     return; // without storage a loop could not be stopped

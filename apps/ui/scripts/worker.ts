@@ -63,8 +63,10 @@ const LEGACY = new RegExp("^" + CACHE_PREFIX + "[0-9a-f]{12}$");
 
 // No clients.claim, and skipWaiting only when the page asks (the "Update" button sends {type: "activate"}): a new version never takes
 // over by itself, so a running page never sees a mix of two builds.
+// Only a page of this copy may ask: the origin is shared with other sites, and their pages can post to this worker too.
 self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "activate") self.skipWaiting();
+  const from = event.source && event.source.url;
+  if (event.data && event.data.type === "activate" && typeof from === "string" && from.startsWith(SCOPE)) self.skipWaiting();
 });
 
 self.addEventListener("install", (event) => event.waitUntil(install()));
@@ -99,9 +101,16 @@ async function install() {
 }
 
 self.addEventListener("activate", (event) => {
-  // Cache Storage is shared by every site on this origin: touch only this scope's older versions and the old unscoped names.
+  // Cache Storage is shared by every site on this origin: touch only this scope's older versions, and an old unscoped name only when
+  // it holds this scope's files (or nothing): another copy of the app under another path keeps its cache.
+  const ours = async (name) => {
+    if (name.startsWith(OWN)) return true;
+    if (!LEGACY.test(name)) return false;
+    const keys = await (await caches.open(name)).keys();
+    return keys.length === 0 || keys.some((request) => request.url.startsWith(SCOPE));
+  };
   event.waitUntil(
-    caches.keys().then((names) => Promise.all(names.filter((n) => n !== CACHE && (n.startsWith(OWN) || LEGACY.test(n))).map((n) => caches.delete(n)))),
+    caches.keys().then((names) => Promise.all(names.filter((n) => n !== CACHE).map(async (n) => (await ours(n)) && caches.delete(n)))),
   );
 });
 

@@ -206,6 +206,7 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
     location.hash = "#/session";
   };
 
+  // The shares come only with the profile: a count or difficulty set by hand drops them, and "Как на экзамене" brings them back.
   const profile = examProfile(bank.exam);
   const applyProfile = () => {
     if (!profile) return;
@@ -313,7 +314,7 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
         {bank.difficulty_scale && (
           <label className="field">
             <span>{t("bank.level")}</span>
-            <Select value={level} onChange={(e) => setLevel(Number(e.target.value))}>
+            <Select value={level} onChange={(e) => { setLevel(Number(e.target.value)); setLevels(undefined); }}>
               <option value={0}>{t("bank.anyLevel")}</option>
               {bank.difficulty_scale.map((s) => <option key={s.level} value={s.level}>{s.level} · {text(s.title, bank.language)}</option>)}
             </Select>
@@ -321,7 +322,7 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
         )}
         <label className="field narrow">
           <span>{t("bank.count")}</span>
-          <input type="number" min={0} max={ref.questions} value={count} onChange={(e) => setCount(Math.max(0, Number(e.target.value)))} />
+          <input type="number" min={0} max={ref.questions} value={count} onChange={(e) => { setCount(Math.max(0, Number(e.target.value))); setLevels(undefined); }} />
         </label>
         {kind === "exam" && (
           <label className="field narrow">

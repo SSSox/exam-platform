@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import katex from "katex";
 import type { ProgressEvent, Session, SessionItem } from "@exam/core";
 import {
-  KEYS, draftResponse, fitsBundle, keptOnStart, parseSavedExam, parseUnwritten, pinnedBanks, withUnwritten, withoutWritten, safeStyle, settleDrafts, unansweredCount, wipe, type SavedExam,
+  KEYS, draftResponse, fitsBundle, keptOnStart, parseSavedExam, parseUnwritten, pinnedBanks, withUnwritten, withoutWritten, writePending, safeStyle, settleDrafts, unansweredCount, wipe, type SavedExam,
 } from "../src/lib.ts";
 
 const T0 = 1_700_000_000_000;
@@ -199,5 +199,39 @@ describe("answers of ended exams that the log may not hold yet", () => {
   });
   test("the wipe clears this key too", () => {
     expect(Object.values(KEYS)).toContain("unwritten");
+  });
+});
+
+describe("writing a finished exam's answers (writePending)", () => {
+  const ev = (id: string) => ({ id, type: "attempt", at: T0 }) as unknown as ProgressEvent;
+  function storage(fails: number) {
+    const s = { unwritten: [] as ProgressEvent[], exam: undefined as string | undefined, log: [] as ProgressEvent[], fails };
+    const io = {
+      keep: (e: ProgressEvent[]) => void (s.unwritten = withUnwritten(s.unwritten, e)),
+      drop: (e: ProgressEvent[]) => void (s.unwritten = withoutWritten(s.unwritten, e)),
+      keptExam: () => s.exam,
+      clearExam: () => void (s.exam = undefined),
+      commit: async (e: ProgressEvent[]) => (s.fails-- > 0 ? false : (s.log = withUnwritten(s.log, e), true)),
+    };
+    return { s, io };
+  }
+  test("A fails twice and B takes the exam key: A stays in its own key, and its later write leaves B's key alone", async () => {
+    const { s, io } = storage(2);
+    const a = [ev("a1"), ev("a2")];
+    s.exam = "A";
+    expect(await writePending("A", a, io)).toBe(false);
+    s.exam = "B"; // "Ещё раз": B is kept in the exam key
+    expect(await writePending("A", a, io)).toBe(false);
+    expect(s.unwritten).toEqual(a);
+    expect(await writePending("A", a, io)).toBe(true);
+    expect(s.unwritten).toEqual([]);
+    expect(s.log).toEqual(a);
+    expect(s.exam).toBe("B");
+  });
+  test("its own exam key goes once the log has the answers", async () => {
+    const { s, io } = storage(0);
+    s.exam = "A";
+    await writePending("A", [ev("a1")], io);
+    expect(s.exam).toBeUndefined();
   });
 });

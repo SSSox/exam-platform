@@ -16,7 +16,7 @@ import { SettingsScreen } from "./settings.tsx";
 import { Confirm, Select } from "./ui.tsx";
 import { useHome } from "./home.ts";
 import { takeBack } from "./back.ts";
-import { fitsBundle, holdExam, keptOnStart, showContent, stepAsync, type ContentShown, type Draft, type Setup, type WriteState } from "./lib.ts";
+import { fitsBundle, holdExam, keptOnStart, showContent, stepAsync, writePending, type ContentShown, type Draft, type Setup, type WriteState } from "./lib.ts";
 
 const initial = loadSettings();
 /** Sets the theme before the first paint; the effect in Root takes over and stops this one's system listener. */
@@ -256,19 +256,21 @@ export function Root() {
   const append = useCallback(async (added: ProgressEvent[]) => (await put(added)).count, [put]);
   const commit = useCallback(async (added: ProgressEvent[]) => (await put(added)).saved, [put]);
 
-  const storePending = useCallback(async (sessionId: string, added: ProgressEvent[]) => {
+  // One write per exam at a time: every practice answer calls `run` again, and each would otherwise start the same write anew.
+  const inFlight = useRef(new Map<string, Promise<boolean>>());
+  const storePending = useCallback((sessionId: string, added: ProgressEvent[]) => {
+    const going = inFlight.current.get(sessionId);
+    if (going) return going;
     unwritten.current.set(sessionId, added);
-    keepUnwritten(added);
     setWrites((now) => ({ ...now, [sessionId]: "saving" }));
-    const stored = await commit(added);
-    // Only its own copy: by the time the log answers, another exam may have been started and kept.
-    if (stored && loadSavedExam()?.session.id === sessionId) clearSavedExam();
-    if (stored) {
-      unwritten.current.delete(sessionId);
-      dropWritten(added);
-    }
-    setWrites((now) => ({ ...now, [sessionId]: stored ? "saved" : "failed" }));
-    return stored;
+    const io = { keep: keepUnwritten, drop: dropWritten, keptExam: () => loadSavedExam()?.session.id, clearExam: clearSavedExam, commit };
+    const write = writePending(sessionId, added, io).then((stored) => {
+      if (stored) unwritten.current.delete(sessionId);
+      setWrites((now) => ({ ...now, [sessionId]: stored ? "saved" : "failed" }));
+      return stored;
+    }).finally(() => inFlight.current.delete(sessionId));
+    inFlight.current.set(sessionId, write);
+    return write;
   }, [commit]);
   const retryPending = useCallback((sessionId: string) => {
     const added = unwritten.current.get(sessionId);

@@ -219,6 +219,28 @@ export function withoutWritten(kept: ProgressEvent[], written: ProgressEvent[]):
   return kept.filter((e) => !ids.has(e.id));
 }
 
+/** The storage a finished exam's answers pass through on the way to the log (`storePending` in `app.tsx` gives the real one). */
+export interface PendingIO {
+  keep(events: ProgressEvent[]): void;
+  drop(events: ProgressEvent[]): void;
+  keptExam(): string | undefined;
+  clearExam(): void;
+  commit(events: ProgressEvent[]): Promise<boolean>;
+}
+/**
+ * Writes a finished exam's answers to the log: their own copy is kept before the write and dropped only after it, and the exam key goes
+ * only while it is still this exam's (a newer exam may have taken it). Resolves to whether the log has them.
+ */
+export async function writePending(sessionId: string, events: ProgressEvent[], io: PendingIO): Promise<boolean> {
+  io.keep(events);
+  const stored = await io.commit(events);
+  if (stored) {
+    if (io.keptExam() === sessionId) io.clearExam();
+    io.drop(events);
+  }
+  return stored;
+}
+
 /**
  * What starting `next` does with the exam kept in storage: `flush` when the kept one has ended and its answers may not be in the log yet
  * (they are written first; their copy in `KEYS.unwritten` stays until the log has them, so a new exam may take the exam key at once),
@@ -418,7 +440,8 @@ export function scaleShares(shares: readonly LevelShare[], total: number): Level
 }
 
 const isShares = (x: unknown): x is LevelShare[] =>
-  Array.isArray(x) && x.length > 0 && x.every((s) => isObject(s) && Number.isSafeInteger(s.level) && Number.isSafeInteger(s.count) && (s.count as number) >= 0) && x.some((s) => (s as LevelShare).count > 0);
+  Array.isArray(x) && x.length > 0 && x.every((s) => isObject(s) && Number.isSafeInteger(s.level) && Number.isSafeInteger(s.count) && (s.count as number) >= 0) && x.some((s) => (s as LevelShare).count > 0)
+  && new Set(x.map((s) => (s as LevelShare).level)).size === x.length;
 
 export interface SessionInput {
   bankId: string; questions: Question[]; states: Map<number, QuestionState>; stats: Pick<BankStats, "mistakes" | "bookmarks">; setup: Setup;
@@ -526,7 +549,12 @@ export function examProfile(exam: unknown): { minutes: number; count: number; le
   if (!ok(minutes) || !ok(count)) return undefined;
   // `official_levels` counts per test; a record with `bank_share` instead is a share of the bank, not of the test, and is not read.
   const raw = exam.official_levels;
-  const levels = Array.isArray(raw) ? raw.map((r) => (isObject(r) ? { level: r.level, count: r.per_test } : r)) : undefined;
+  const listed = Array.isArray(raw) ? raw.map((r) => (isObject(r) ? { level: r.level, count: r.per_test } : r)) : undefined;
+  // A level listed twice counts once with both numbers added: two draws from one level would take the same questions twice.
+  const sound = Array.isArray(listed) && listed.every((s) => isObject(s) && Number.isSafeInteger(s.level) && Number.isSafeInteger(s.count) && (s.count as number) >= 0);
+  const levels = sound
+    ? [...(listed as LevelShare[]).reduce((by, s) => by.set(s.level, (by.get(s.level) ?? 0) + s.count), new Map<number, number>())].map(([level, n]) => ({ level, count: n }))
+    : listed;
   return isShares(levels) ? { minutes, count, levels } : { minutes, count };
 }
 

@@ -73,7 +73,8 @@ export function examHistory(events: ProgressEvent[], bank: string): ExamResult[]
     if (!disputed.has(e.id)) {
       if (e.correct) exam.correct++;
       // An old or foreign event without a score is worth what its verdict says.
-      exam.points += Number.isFinite(e.score) ? e.score : e.correct ? 1 : 0;
+      // A score from outside the range (an imported log) counts as the nearest end of it, so the share stays within 0..100.
+      exam.points += Number.isFinite(e.score) ? Math.min(1, Math.max(0, e.score)) : e.correct ? 1 : 0;
     }
     bySession.set(e.session, exam);
   }

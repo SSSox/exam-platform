@@ -114,5 +114,7 @@ describe("reloadAllowed", () => {
   it("ignores a garbage or future mark", () => {
     expect(reloadAllowed(Number.NaN, 1000)).toBe(true);
     expect(reloadAllowed(9000, 1000)).toBe(true);
+    // Offline the chunk is missing for want of a network: no reload, whatever the mark says.
+    expect(reloadAllowed(null, 1000, false)).toBe(false);
   });
 });

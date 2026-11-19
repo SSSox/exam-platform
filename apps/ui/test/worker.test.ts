@@ -18,7 +18,7 @@ function fakeCaches() {
     open: async (name: string) => {
       if (!stores.has(name)) stores.set(name, new Map());
       const store = stores.get(name)!;
-      return { match: async (key: string) => store.get(key)?.clone(), put: async (key: string, response: Response) => void store.set(key, response) };
+      return { match: async (key: string) => store.get(key)?.clone(), put: async (key: string, response: Response) => void store.set(key, response), keys: async () => [...store.keys()].map((url) => ({ url })) };
     },
     keys: async () => [...stores.keys()],
     delete: async (name: string) => stores.delete(name),
@@ -181,6 +181,9 @@ describe("worker versions and activation", () => {
     const [own, forkName] = names(caches);
     expect(own).not.toBe(forkName);
     for (const name of ["exam-trainer-shell-0123456789ab", "exam-trainer-shell-notes", "other-site-cache"]) await caches.open(name);
+    // Old unscoped names: one holds this copy's files, one a fork's (kept: the old name cannot say whose it is, its files can).
+    await (await caches.open("exam-trainer-shell-aaaaaaaaaaaa")).put(SCOPE + "index.html", new Response("old"));
+    await (await caches.open("exam-trainer-shell-bbbbbbbbbbbb")).put(fork + "index.html", new Response("old fork"));
 
     const next = boot("v2", caches, netFor());
     await next.run("install");
@@ -190,9 +193,11 @@ describe("worker versions and activation", () => {
     expect(left).toContain("exam-trainer-shell-notes");
     expect(left).toContain("other-site-cache");
     expect(left).not.toContain("exam-trainer-shell-0123456789ab");
+    expect(left).not.toContain("exam-trainer-shell-aaaaaaaaaaaa");
+    expect(left).toContain("exam-trainer-shell-bbbbbbbbbbbb");
     expect(left).not.toContain(own);
     expect(left.filter((n) => n.endsWith("-v2"))).toHaveLength(1);
-    expect(left).toHaveLength(4);
+    expect(left).toHaveLength(5);
   });
 
   it("keeps the current cache when it activates", async () => {
@@ -210,10 +215,14 @@ describe("skipWaiting", () => {
     await worker.run("install");
     await worker.run("activate");
     expect(worker.skipped).toEqual([]);
-    worker.handlers.get("message")!({ data: { type: "other" } });
-    worker.handlers.get("message")!({ data: undefined });
+    const page = { url: SCOPE + "#/session" };
+    worker.handlers.get("message")!({ data: { type: "other" }, source: page });
+    worker.handlers.get("message")!({ data: undefined, source: page });
+    // Another site on the shared origin, or no sender, cannot switch this copy.
+    worker.handlers.get("message")!({ data: { type: "activate" }, source: { url: "https://u.github.io/other-site/" } });
+    worker.handlers.get("message")!({ data: { type: "activate" }, source: null });
     expect(worker.skipped).toEqual([]);
-    worker.handlers.get("message")!({ data: { type: "activate" } });
+    worker.handlers.get("message")!({ data: { type: "activate" }, source: page });
     expect(worker.skipped).toEqual([1]);
   });
 });
