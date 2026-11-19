@@ -168,7 +168,7 @@ The app shows wordings, options, and explanations as Markdown with KaTeX formula
 | `scoring.multiple_choice` | yes | `exact`: only the complete set counts. `partial`: partial credit |
 | `topics` | yes | At least one topic. The topic `id` is used in questions as `topic_id` |
 | `created_on`, `license`, `authors` | no | Information about the bank |
-| `exam` | no | A free-form object with an exam profile. The app reads two fields: `duration_minutes` and `test_question_count`. When both are positive whole numbers, the mock exam setup shows a button that sets the same length and number of questions. Other fields are not read |
+| `exam` | no | A free-form object with an exam profile. The app reads two fields: `duration_minutes` and `test_question_count`. When both are positive whole numbers, the mock exam setup shows a button that sets the same length and number of questions. Also read is `official_levels`: a list of `{level, per_test}` (a difficulty level and how many questions of that level one test has; a record with `bank_share` instead of `per_test` is not read). When it is set, the "like the exam" mock exam takes that many questions of each level. Other fields are not read |
 | `sources`, `source_catalog`, `source_indexing`, `notes`, `legacy` | no | Service information about where the bank came from |
 
 Topics allow extra fields. Otherwise the schema is strict: a typo in a field name causes an error.

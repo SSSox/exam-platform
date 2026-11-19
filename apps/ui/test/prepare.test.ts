@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { Question } from "@exam/schema";
 import { attemptEvent, createSession, finish, isDue, learn, project, submit, type ProgressEvent, type QuestionState } from "@exam/core";
 import {
-  KEYS, backupDue, buildSession, dueCount, examProfile, findQuestions, fitSetup, isFirefox, isProgressEvent, mistakeIds, parseSetups, plainText as stripped, searchable, sessionKey, setupOf,
+  KEYS, backupDue, buildSession, dueCount, examProfile, findQuestions, fitSetup, isFirefox, isProgressEvent, mistakeIds, parseSetups, plainText as stripped, scaleShares, searchable, sessionKey, setupOf,
   stepAsync, storeSetup, toggleChoice, givenLines, type Setup,
 } from "../src/lib.ts";
 
@@ -70,6 +70,85 @@ describe("buildSession", () => {
     expect(s.config).toMatchObject({ kind: "practice", unsupported: "self_check", count: 2, relearn: true });
     expect(s.items.map((i) => [i.question, i.mode]).sort()).toEqual([[1, "choice"], [5, "self_check"]]);
     expect(buildSession(input({}, { only: [] }))).toBeUndefined();
+  });
+});
+
+describe("exam by levels", () => {
+  // Levels 1..4 hold 20, 15, 10 and 6 questions; ids run level by level from 1.
+  const sizes: [number, number][] = [[1, 20], [2, 15], [3, 10], [4, 6]];
+  let next = 1;
+  const questions = sizes.flatMap(([level, n]) => Array.from({ length: n }, () => choice(next++, 1, { difficulty_level: level })));
+  const levelOf = new Map(questions.map((x) => [x.id, x.difficulty_level]));
+  const shares = [{ level: 1, count: 16 }, { level: 2, count: 12 }, { level: 3, count: 8 }, { level: 4, count: 4 }];
+  const exam = (setup: Partial<Setup>, qs = questions, seed = 7) => buildSession({
+    bankId: "b", questions: qs, states: new Map(), stats: { mistakes: [], bookmarks: [] }, unsupported: "skip", now: T0, seed, id: "s",
+    setup: { ...plain("b"), kind: "exam", scope: "all", count: 40, levels: shares, ...setup },
+  })!;
+  const perLevel = (s: { items: { question: number }[] }) => [1, 2, 3, 4].map((l) => s.items.filter((i) => levelOf.get(i.question) === l).length);
+
+  test("scaleShares: exact, proportional, always adds up", () => {
+    expect(scaleShares(shares, 40)).toEqual(shares);
+    expect(scaleShares(shares, 10).map((s) => s.count)).toEqual([4, 3, 2, 1]);
+    expect(scaleShares(shares, 3).reduce((a, s) => a + s.count, 0)).toBe(3);
+    for (let n = 1; n < 60; n++) expect(scaleShares(shares, n).reduce((a, s) => a + s.count, 0)).toBe(n);
+    expect(scaleShares(shares, 0)).toEqual([]);
+  });
+
+  test("takes each level's number of questions", () => {
+    expect(perLevel(exam({}))).toEqual([16, 12, 8, 4]);
+    expect(perLevel(exam({ count: 10 }))).toEqual([4, 3, 2, 1]);
+  });
+
+  test("tops up from the other levels when one is short", () => {
+    const few = questions.filter((x) => x.difficulty_level !== 4 || x.id % 2);
+    const s = exam({}, few);
+    expect(s.items).toHaveLength(40);
+    expect(new Set(s.items.map((i) => i.question)).size).toBe(40);
+    expect(perLevel(s)[3]).toBe(3);
+    expect(perLevel(exam({ count: 40 }, questions.filter((x) => x.difficulty_level === 1))).slice(1)).toEqual([0, 0, 0]);
+  });
+
+  test("the same seed gives the same questions in the same order", () => {
+    const ids = (seed: number) => exam({}, questions, seed).items.map((i) => i.question);
+    expect(ids(5)).toEqual(ids(5));
+    expect(ids(5)).not.toEqual(ids(6));
+    // Not grouped by level: the order is shuffled.
+    expect(perLevel({ items: ids(5).slice(0, 16).map((question) => ({ question })) })).not.toEqual([16, 0, 0, 0]);
+  });
+
+  test("shares apply only to an exam with any difficulty", () => {
+    const base = exam({ levels: undefined }).items.map((i) => i.question);
+    expect(exam({ level: 2 }).items.every((i) => levelOf.get(i.question) === 2)).toBe(true);
+    expect(buildSession({ ...{ bankId: "b", questions, states: new Map(), stats: { mistakes: [], bookmarks: [] }, unsupported: "skip" as const, now: T0, seed: 7, id: "s" }, setup: { ...plain("b"), scope: "all", count: 40, levels: shares } })!.config.kind).toBe("practice");
+    // Without shares an exam keeps the old order.
+    expect(exam({ levels: undefined }).items.map((i) => i.question)).toEqual(base);
+    expect(base).toHaveLength(40);
+  });
+
+  test("profile: per_test is read, bank_share and junk are not", () => {
+    const base = { duration_minutes: 90, test_question_count: 40 };
+    const rec = (level: number, per_test: number) => ({ level, bank_required: 120, per_test });
+    expect(examProfile({ ...base, official_levels: [rec(1, 16), rec(2, 12), rec(3, 8), rec(4, 4)] })).toEqual({ minutes: 90, count: 40, levels: shares });
+    for (const official_levels of [[{ level: 1, bank_share: 0.4 }], [rec(1, 16), { level: 2, bank_share: 0.3 }], [rec(1, 1.5)], [rec(1, -1)], [rec(1.5, 3)], [rec(1, 0)], [], "x", {}, [null], [1], [{ level: "1", per_test: 2 }]]) {
+      expect(examProfile({ ...base, official_levels })).toEqual({ minutes: 90, count: 40 });
+    }
+  });
+
+  test("an old setup without shares still reads; bad shares are dropped, the rest stays", () => {
+    const good = { ...plain("x") };
+    const raw = JSON.stringify([["a", good], ["b", { ...good, levels: shares }], ["c", { ...good, levels: [{ level: "x" }] }], ["d", { ...good, levels: "no" }]]);
+    const all = parseSetups(raw);
+    expect(all.a).toEqual(good);
+    expect(all.b).toEqual({ ...good, levels: shares });
+    expect(all.c).toEqual(good);
+    expect(all.d).toEqual(good);
+    expect("levels" in all.c!).toBe(false);
+  });
+
+  test("fitSetup drops shares of levels the bank does not have", () => {
+    const facts = { topicIds: [1], levels: [1, 2], mistakes: 0, bookmarks: 0, questions: 100 };
+    expect(fitSetup({ ...plain("x"), levels: shares }, facts).levels).toEqual([{ level: 1, count: 16 }, { level: 2, count: 12 }]);
+    expect("levels" in fitSetup({ ...plain("x"), levels: shares }, { ...facts, levels: [] })).toBe(false);
   });
 });
 

@@ -1,4 +1,4 @@
-import { LEARNED_BOX, createSession, entriesOf, goTo, isDue, isFork, modeFor, pickAdaptive, strength, submit, type AnswerMode, type BankBundle, type BankStats, type ContentIndex, type Entry, type NodeManifest, type NodeRef, type ProgressEvent, type QuestionState, type Response, type Session, type SessionConfig, type SessionItem, type Target } from "@exam/core";
+import { LEARNED_BOX, createSession, entriesOf, goTo, isDue, isFork, modeFor, pickAdaptive, shuffled, strength, submit, type AnswerMode, type BankBundle, type BankStats, type ContentIndex, type Entry, type NodeManifest, type NodeRef, type ProgressEvent, type QuestionState, type Response, type Session, type SessionConfig, type SessionItem, type Target } from "@exam/core";
 import type { Localized, Question } from "@exam/schema";
 
 /**
@@ -368,7 +368,34 @@ export function stepAsync<T>(now: AsyncState<T>, step: AsyncStep<T>): AsyncState
 export const isFirefox = (userAgent: string): boolean => /\bFirefox\//.test(userAgent);
 
 /** What the learner chose on a bank's preparation panel. */
-export interface Setup { scope: "smart" | "all" | "mistakes" | "bookmarks"; answerMode: AnswerMode; kind: "practice" | "exam"; topics: number[]; level: number; count: number; minutes: number }
+export interface Setup {
+  scope: "smart" | "all" | "mistakes" | "bookmarks"; answerMode: AnswerMode; kind: "practice" | "exam"; topics: number[]; level: number; count: number; minutes: number;
+  /** Questions per difficulty level of the bank's own exam; used only for an exam with any difficulty, scaled to `count`. */
+  levels?: LevelShare[];
+}
+
+export interface LevelShare { level: number; count: number }
+
+/** `total` split in proportion to the shares by largest remainders, so the parts add up to exactly `total`; empty parts are dropped. */
+export function scaleShares(shares: readonly LevelShare[], total: number): LevelShare[] {
+  const sum = shares.reduce((a, s) => a + s.count, 0);
+  if (!(sum > 0) || !(total > 0)) return [];
+  const parts = shares.map((s, i) => {
+    const exact = (s.count * total) / sum;
+    return { i, level: s.level, floor: Math.floor(exact), rest: exact - Math.floor(exact), weight: s.count };
+  });
+  let left = total - parts.reduce((a, p) => a + p.floor, 0);
+  // Bigger remainder first; a tie goes to the bigger share, then to the earlier level.
+  for (const p of [...parts].sort((a, b) => b.rest - a.rest || b.weight - a.weight || a.i - b.i)) {
+    if (left <= 0) break;
+    p.floor++;
+    left--;
+  }
+  return parts.filter((p) => p.floor > 0).map((p) => ({ level: p.level, count: p.floor }));
+}
+
+const isShares = (x: unknown): x is LevelShare[] =>
+  Array.isArray(x) && x.length > 0 && x.every((s) => isObject(s) && Number.isSafeInteger(s.level) && Number.isSafeInteger(s.count) && (s.count as number) >= 0) && x.some((s) => (s as LevelShare).count > 0);
 
 export interface SessionInput {
   bankId: string; questions: Question[]; states: Map<number, QuestionState>; stats: Pick<BankStats, "mistakes" | "bookmarks">; setup: Setup;
@@ -385,7 +412,17 @@ export function buildSession(input: SessionInput): Session | undefined {
   const unsupported = only ? "self_check" : input.unsupported;
   const fits = (q: Question) => (!setup.topics.length || setup.topics.includes(q.topic_id)) && (!setup.level || q.difficulty_level === setup.level);
   let ids = only ?? (setup.scope === "mistakes" ? stats.mistakes : setup.scope === "bookmarks" ? stats.bookmarks : undefined);
-  if (smart) {
+  // Shares make no sense for "all of it" (count 0), so they need a count to scale to.
+  const shares = !only && !practice && !setup.level && setup.count > 0 && setup.levels?.length ? scaleShares(setup.levels, setup.count) : [];
+  if (shares.length) {
+    const pool = questions.filter((q) => !q.retired && fits(q) && (!ids || ids.includes(q.id)) && modeFor(q, { answerMode: setup.answerMode, unsupported }));
+    const chosen: Question[] = [];
+    for (const { level, count } of shares) chosen.push(...shuffled(pool.filter((q) => q.difficulty_level === level), input.seed).slice(0, count));
+    // A level with too few questions is topped up from whatever the pool has left.
+    const taken = new Set(chosen.map((q) => q.id));
+    chosen.push(...shuffled(pool.filter((q) => !taken.has(q.id)), input.seed).slice(0, setup.count - chosen.length));
+    ids = shuffled(chosen, input.seed).map((q) => q.id);
+  } else if (smart) {
     // Only questions the chosen answer mode can ask, or the draw could hand the session questions it then drops.
     const pool = questions.filter((q) => !q.retired && fits(q) && modeFor(q, { answerMode: setup.answerMode, unsupported }));
     ids = pickAdaptive(pool, states, now, setup.count || undefined, input.seed);
@@ -393,7 +430,7 @@ export function buildSession(input: SessionInput): Session | undefined {
   // An empty id list would mean "no restriction" to createSession, so it must stop here.
   if (ids && !ids.length) return undefined;
   const config: SessionConfig = {
-    kind: practice ? "practice" : "exam", answerMode: setup.answerMode, unsupported, shuffle: true, seed: input.seed, keepOrder: smart, relearn: practice,
+    kind: practice ? "practice" : "exam", answerMode: setup.answerMode, unsupported, shuffle: true, seed: input.seed, keepOrder: smart || shares.length > 0, relearn: practice,
     topics: only ? [] : setup.topics, levels: !only && setup.level ? [setup.level] : undefined, ids, count: only ? only.length : setup.count || undefined,
     timeLimitSec: !practice && setup.minutes ? setup.minutes * 60 : undefined, passPercent: !practice ? 50 : undefined,
   };
@@ -414,7 +451,12 @@ const isSetup = (x: unknown): x is Setup =>
 function readSetups(raw: string | null | undefined): [string, Setup][] {
   const x = raw ? safeParse(raw) : null;
   const pairs: unknown[] = Array.isArray(x) ? x : isObject(x) ? Object.entries(x) : [];
-  return pairs.filter((p): p is [string, Setup] => Array.isArray(p) && p.length === 2 && typeof p[0] === "string" && isSetup(p[1]));
+  return pairs.filter((p): p is [string, Setup] => Array.isArray(p) && p.length === 2 && typeof p[0] === "string" && isSetup(p[1]))
+    // A malformed `levels` costs only the shares, not the rest of the remembered setup.
+    .map(([id, setup]) => {
+      const { levels, ...rest } = setup;
+      return [id, isShares(levels) ? { ...rest, levels: levels.map((s) => ({ level: s.level, count: s.count })) } : rest];
+    });
 }
 
 /** The remembered setups by bank id. Never throws; an entry that is not well-formed is dropped. */
@@ -442,21 +484,27 @@ export function fitSetup(saved: Setup | undefined, facts: BankFacts): Setup {
   let scope = saved.scope;
   if ((scope === "mistakes" && !facts.mistakes) || (scope === "bookmarks" && !facts.bookmarks)) scope = "smart";
   if (saved.kind === "exam" && scope === "smart") scope = "all";
+  const levels = saved.levels?.filter((s) => facts.levels.includes(s.level));
   return {
     scope, answerMode: saved.answerMode, kind: saved.kind,
     topics: saved.topics.filter((id) => facts.topicIds.includes(id)),
     level: facts.levels.includes(saved.level) ? saved.level : 0,
     count: whole(saved.count, facts.questions), minutes: whole(saved.minutes),
+    ...(levels?.some((s) => s.count > 0) ? { levels } : {}),
   };
 }
 
-/** The length and size of a bank's mock exam from its free-form `exam` object; both must be positive whole numbers. */
-export function examProfile(exam: unknown): { minutes: number; count: number } | undefined {
+/** The length and size of a bank's mock exam from its free-form `exam` object (both positive whole numbers), and its questions per difficulty level when all are given. */
+export function examProfile(exam: unknown): { minutes: number; count: number; levels?: LevelShare[] } | undefined {
   if (!isObject(exam)) return undefined;
   const minutes = exam.duration_minutes;
   const count = exam.test_question_count;
   const ok = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) > 0;
-  return ok(minutes) && ok(count) ? { minutes, count } : undefined;
+  if (!ok(minutes) || !ok(count)) return undefined;
+  // `official_levels` counts per test; a record with `bank_share` instead is a share of the bank, not of the test, and is not read.
+  const raw = exam.official_levels;
+  const levels = Array.isArray(raw) ? raw.map((r) => (isObject(r) ? { level: r.level, count: r.per_test } : r)) : undefined;
+  return isShares(levels) ? { minutes, count, levels } : { minutes, count };
 }
 
 /** How many seen questions have their repeat time come, counted from the states alone; withdrawn ids are left out as in `bankProgress`. */

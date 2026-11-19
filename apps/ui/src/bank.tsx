@@ -99,6 +99,8 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
   const [level, setLevel] = useState(0);
   const [count, setCount] = useState(20);
   const [minutes, setMinutes] = useState(20);
+  // Questions per level of the bank's own exam: kept through manual edits, used only by an exam with any difficulty.
+  const [levels, setLevels] = useState<Setup["levels"]>();
   const [nothing, setNothing] = useState(false);
   // "Nothing fits" is about the settings it was shown for: any change of them takes it back.
   useEffect(() => setNothing(false), [scope, kind, answerMode, topics, level, count]);
@@ -140,12 +142,12 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
   useEffect(() => {
     // Nothing is remembered until the log was really read: the panel was fitted to an empty one, and its "smart" would replace a saved "mistakes".
     if (!bankKey || fitted !== bankKey || !logRead || fittedBlind.current) return;
-    const setup: Setup = { scope, answerMode, kind, topics, level, count, minutes };
+    const setup: Setup = { scope, answerMode, kind, topics, level, count, minutes, ...(levels && { levels }) };
     const json = JSON.stringify(setup);
     if (json === lastStored.current) return;
     lastStored.current = json;
     rememberSetup(bankKey, setup);
-  }, [bankKey, fitted, logRead, scope, answerMode, kind, topics, level, count, minutes]);
+  }, [bankKey, fitted, logRead, scope, answerMode, kind, topics, level, count, minutes, levels]);
 
   // The remembered setup is fitted to the bank as it is now, which needs the log: it says whether any mistakes or bookmarks are left.
   if (!loaded.data || !view || !logReady) return <Status error={loaded.error} reload={loaded.reload} />;
@@ -168,6 +170,7 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
     setLevel(own.level);
     setCount(own.count);
     setMinutes(own.minutes);
+    setLevels(own.levels);
     setFitted(bank.id);
     return null;
   }
@@ -192,7 +195,7 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
   /** `only` opens a session on that one question, whatever the panel says. */
   const start = (only?: Question) => {
     const at = Date.now();
-    const setup: Setup = { scope, answerMode, kind, topics, level, count, minutes };
+    const setup: Setup = { scope, answerMode, kind, topics, level, count, minutes, ...(levels && { levels }) };
     const session = buildSession({
       bankId: bank.id, questions: bundle.questions, states, stats, setup, unsupported: settings.unsupported,
       only: only && [only.id], now: at, seed: at % 2 ** 31, id: uuidv7(at),
@@ -208,6 +211,8 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
     if (!profile) return;
     setCount(Math.min(profile.count, active.length));
     setMinutes(profile.minutes);
+    setLevel(0);
+    setLevels(profile.levels);
   };
   const chooseKind = (v: "practice" | "exam") => {
     setKind(v);
@@ -240,6 +245,8 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
     kind === "exam" && scope !== "all" && scopeTitle,
     asked > 0 && t("catalog.questions", { count: asked }),
     level > 0 && `${t("bank.level")} ${level}`,
+    // The same condition as `buildSession`: a learner who changed the count still sees why the questions are not drawn at random.
+    kind === "exam" && level === 0 && count > 0 && levels && levels.length > 0 && t("bank.byLevels"),
     kind === "exam" && minutes > 0 && t("bank.minutesShort", { n: minutes }),
     answerMode === "typed" && t("mode.typed"),
     topics.length > 0 && `${t("bank.topics")}: ${topics.length}`,
