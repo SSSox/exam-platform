@@ -55,8 +55,9 @@ const KATEX_FONTS = SCOPE + "assets/KaTeX_";
 // so a running page never sees a mix of two builds.
 self.addEventListener("install", (event) => {
   // addAll is atomic: if any file fails, the install fails and the previous worker stays in charge.
-  // "reload" skips the HTTP cache, which could otherwise hand over a stale index.html.
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES.map((f) => new Request(new URL(f, SCOPE).href, { cache: "reload" })))));
+  // "reload" skips the HTTP cache, which could otherwise hand over a stale page or icon. Files under assets/ carry a content hash in
+  // their names, so the copy the browser already has is the right one and a new version downloads only what changed.
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES.map((f) => new Request(new URL(f, SCOPE).href, { cache: f.startsWith("assets/") ? "default" : "reload" })))));
 });
 
 self.addEventListener("activate", (event) => {
