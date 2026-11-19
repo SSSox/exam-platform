@@ -1,7 +1,9 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import { parseDownloads } from "./src/downloads-config.ts";
+import { precacheList, shellVersion, workerSource } from "./scripts/worker.ts";
 
 /**
  * Where the app pulls question banks from over the network: the `urls` of `content-sources.json`
@@ -27,10 +29,35 @@ function downloads(): { windows?: string; android?: string } {
   });
 }
 
+/** All files under `dir` as `/`-separated paths relative to `root`. */
+function listFiles(dir: string, root = dir): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? listFiles(join(dir, e.name), root) : [relative(root, join(dir, e.name)).replace(/\\/g, "/")],
+  );
+}
+
+/** Writes the offline shell worker `sw.js` next to the built page (build only). The rules live in `scripts/worker.ts`. */
+function shellWorker(): Plugin {
+  let outDir = "";
+  return {
+    name: "exam-shell-worker",
+    apply: "build",
+    configResolved(config) {
+      outDir = resolve(config.root, config.build.outDir);
+    },
+    closeBundle() {
+      const page = join(outDir, "index.html");
+      if (!existsSync(page)) return;
+      const list = precacheList(listFiles(outDir));
+      writeFileSync(join(outDir, "sw.js"), workerSource(list, shellVersion(list, readFileSync(page, "utf8"))));
+    },
+  };
+}
+
 export default defineConfig({
   // Relative paths so the same build works on a web host, in Tauri and from a subfolder.
   base: "./",
-  plugins: [react()],
+  plugins: [react(), shellWorker()],
   define: {
     __CONTENT_URLS__: JSON.stringify(contentUrls()),
     // `scripts/content.mjs` runs before vite; with `EXAM_CONTENT_DIR=none` it leaves no snapshot, and the app must not look for one.
