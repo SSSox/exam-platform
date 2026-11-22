@@ -71,6 +71,8 @@ export interface Settings {
   /** "auto" follows the interface language. */
   content: string;
   unsupported: "self_check" | "skip";
+  /** The Windows and Android apps install a version they find without asking (off by default: they ask). */
+  autoUpdate: boolean;
 }
 
 function read<T>(key: string, fallback: () => T): T {
@@ -94,6 +96,7 @@ export const loadSettings = (): Settings => ({
   theme: "system",
   content: "auto",
   unsupported: "self_check",
+  autoUpdate: false,
   ...read<Partial<Settings>>(KEYS.settings, () => ({})),
 });
 

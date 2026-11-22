@@ -2,12 +2,32 @@ import { LEARNED_BOX, createSession, entriesOf, goTo, isDue, isFork, modeFor, pi
 import type { Localized, Question } from "@exam/schema";
 
 /**
- * What the result counts as shown. An exam counts every question, answered or not. Practice moves only forward, so an item behind
- * the current one was answered or skipped; the ones ahead, repeats queued after a miss among them, were never shown. Leaving early
+ * What the result counts as shown. An exam counts every question, answered or not. In practice an item behind the current one, or
+ * behind the last answer, was answered or skipped; the ones ahead, repeats queued after a miss among them, were never shown. Leaving early
  * is not a miss, nor is the open question left unanswered when the student finishes.
  */
-export const shown = (s: Pick<Session, "config" | "items" | "index">) =>
-  s.items.filter((item, i) => s.config.kind === "exam" || item.graded != null || i < s.index);
+export const shown = (s: Pick<Session, "config" | "items" | "index">) => {
+  // Practice can be finished from a question gone back to: what lies before the last answer was passed all the same.
+  const passed = Math.max(s.index, s.items.findLastIndex((item) => item.graded));
+  return s.items.filter((item, i) => s.config.kind === "exam" || item.graded != null || i < passed);
+};
+
+/**
+ * A practice question gone back to keeps its answer hidden while the same question still waits further on (a repeat after a miss):
+ * looking it up there would spoil the repeat. It opens again once every repeat is answered.
+ */
+export const awaitsRepeat = (s: Pick<Session, "config" | "items">, index: number): boolean => {
+  const item = s.items[index];
+  return s.config.kind === "practice" && item?.graded != null && s.items.some((other, k) => k !== index && other.question === item.question && !other.graded);
+};
+
+/** Where an answer put a missed question back into the sitting, or -1: the one place where `after` holds an item `before` did not. */
+export const putBackAt = (before: Pick<Session, "items" | "index">, after: Pick<Session, "items">): number =>
+  after.items.length > before.items.length ? after.items.findIndex((item, k) => k !== before.index && item !== before.items[k]) : -1;
+
+/** What the screen keeps by question position, after a question was put back at `at`: the keys from there on move one place along. */
+export const shiftFrom = <T>(byIndex: Record<number, T>, at: number): Record<number, T> =>
+  at < 0 ? byIndex : Object.fromEntries(Object.entries(byIndex).map(([k, v]) => [Number(k) >= at ? Number(k) + 1 : Number(k), v]));
 
 /**
  * Ids of the questions the result's "Retry mistakes" asks again and its "Mistakes" line counts: the first showings that were not answered right.
@@ -17,7 +37,7 @@ export const mistakeIds = (s: Pick<Session, "config" | "items" | "index">): numb
   shown(s).filter((i) => !i.again && (s.config.kind === "exam" ? !i.graded?.correct : i.graded != null && !i.graded.correct)).map((i) => i.question);
 
 /** The app's own keys in local storage. On a shared origin (a github.io site) any other key belongs to someone else. */
-export const KEYS = { settings: "settings", place: "place", device: "device", exam: "exam", updateCheck: "updateCheck", setup: "setup", backup: "backup", unwritten: "unwritten" } as const;
+export const KEYS = { settings: "settings", place: "place", device: "device", exam: "exam", updateCheck: "updateCheck", updateSkip: "updateSkip", setup: "setup", backup: "backup", unwritten: "unwritten" } as const;
 
 /**
  * Removes everything the app keeps on the device: the stored tables (the progress log, the downloaded banks) and its own keys in local storage.
@@ -412,6 +432,18 @@ export const isUpdateDue = (lastCheck: number | undefined, now: number): boolean
  * again and offers it again; a failed check is retried at the next launch too.
  */
 export const isCheckDone = (phase: UpdatePhase): boolean => phase === "latest";
+
+/**
+ * What the app does about a version the check found, while nothing on screen must not be interrupted: installs it by itself
+ * (the "update automatically" setting, once per version a run, so a cancelled Android installer is not opened again and again),
+ * asks, or nothing: the version was skipped with "Don't show again" (only that version: the next one asks again), or already
+ * answered in this run ("Later", "Install").
+ */
+export function updateOffer(state: UpdateState, o: { auto: boolean; skipped?: string; answered?: string; tried?: string }): "install" | "ask" | undefined {
+  if ((state.phase !== "available" && state.phase !== "ready") || !state.version) return undefined;
+  if (o.auto) return state.version === o.tried ? undefined : "install";
+  return state.version === o.skipped || state.version === o.answered ? undefined : "ask";
+}
 
 export interface AsyncState<T> { data?: T; error?: unknown }
 export type AsyncStep<T> = { start: true } | { data: T } | { error: unknown };

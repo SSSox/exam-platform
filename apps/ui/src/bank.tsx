@@ -11,6 +11,7 @@ import { Segmented, Select, SideSheet, useDockHeight, useMinute, useWide } from 
 import { Peek } from "./peek.tsx";
 import { STATUSES, StatusMark } from "./status.tsx";
 import { Stops, stopsOf } from "./stops.tsx";
+import { useUpdating } from "./updates.tsx";
 import { buildSession, examProfile, findQuestions, fitSetup, homeOf, lineOf, pageAbove, pathNames, searchable, stationsOf, type Setup } from "./lib.ts";
 
 type Filter = QuestionStatus | "due" | null;
@@ -149,6 +150,7 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
     rememberSetup(bankKey, setup);
   }, [bankKey, fitted, logRead, scope, answerMode, kind, topics, level, count, minutes, levels]);
 
+  const updating = useUpdating();
   // The remembered setup is fitted to the bank as it is now, which needs the log: it says whether any mistakes or bookmarks are left.
   if (!loaded.data || !view || !logReady) return <Status error={loaded.error} reload={loaded.reload} />;
 
@@ -194,6 +196,7 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
 
   /** `only` opens a session on that one question, whatever the panel says. */
   const start = (only?: Question) => {
+    if (updating) return;
     const at = Date.now();
     const setup: Setup = { scope, answerMode, kind, topics, level, count, minutes, ...(levels && { levels }) };
     const session = buildSession({
@@ -435,13 +438,14 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
       {/* The two things done most, the way back and the start, stay at the bottom of the screen whatever the page is scrolled to. */}
       <div className="dock" ref={dockBar}>
         {nothing && !sheet && <p className="hint warn" role="alert">{t("bank.nothing")}</p>}
+        {updating && !sheet && <p className="hint" role="status">{t("update.waitToStart")}</p>}
         <a className="pill back" href={`#/n/${pageAbove(chain)}`}><ArrowLeft size={18} strokeWidth={1.5} aria-hidden />{t("nav.back")}</a>
         {!wide && (
           <button type="button" className="button dock-setup" aria-haspopup="dialog" aria-label={t("bank.setup")} title={t("bank.setup")} onClick={() => setSetupOpen(true)}>
             <SlidersHorizontal size={18} strokeWidth={1.5} aria-hidden /><span>{t("bank.setupShort")}</span>
           </button>
         )}
-        <button className="button primary big start" onClick={() => start()}>
+        <button className="button primary big start" disabled={updating} onClick={() => start()}>
           <span>{t("bank.start")}</span>
           {!wide && <small>{summary}</small>}
         </button>
@@ -452,7 +456,8 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
           title={t("bank.setup")} closeLabel={t("bank.setupClose")} onClose={() => setSetupOpen(false)}
           foot={<>
             {nothing && <p className="hint warn" role="alert">{t("bank.nothing")}</p>}
-            <button type="button" className="button primary big" onClick={() => start()}>{t("bank.start")}</button>
+            {updating && <p className="hint" role="status">{t("update.waitToStart")}</p>}
+            <button type="button" className="button primary big" disabled={updating} onClick={() => start()}>{t("bank.start")}</button>
           </>}
         >
           {controls}{overview}

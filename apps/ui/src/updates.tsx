@@ -1,8 +1,10 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, RefreshCw } from "lucide-react";
 import { applySiteUpdate, useSiteUpdate } from "./pwa.ts";
-import { KEYS, isCheckDone, isUpdateDue, readUpdateState, type UpdateState } from "./lib.ts";
+import { useApp } from "./app.tsx";
+import { useBackClose } from "./ui.tsx";
+import { KEYS, isCheckDone, isUpdateDue, readUpdateState, updateOffer, type UpdateState } from "./lib.ts";
 
 /**
  * Updates of the Windows and Android apps. The shell finds, downloads and verifies the new version; the page only asks and shows.
@@ -42,6 +44,38 @@ const subscribe = (listener: () => void) => {
 };
 
 export const useUpdate = (): UpdateState => useSyncExternalStore(subscribe, () => state);
+
+/**
+ * A new version is on its way in: the Windows installer will close the app, the Android one opens over it. No test starts meanwhile,
+ * so none is cut off; the dialog and the automatic install themselves never begin during one.
+ */
+export const useUpdating = (): boolean => {
+  const { phase } = useUpdate();
+  return phase === "downloading" || phase === "installing";
+};
+
+/** The version the learner asked not to be shown again ("Don't show again"); a newer one is shown as usual. */
+let skipped: string | undefined = (() => {
+  try {
+    return localStorage.getItem(KEYS.updateSkip) ?? undefined;
+  } catch {
+    return undefined;
+  }
+})();
+const useSkipped = () => useSyncExternalStore(subscribe, () => skipped);
+
+function skipVersion(version: string) {
+  skipped = version;
+  try {
+    localStorage.setItem(KEYS.updateSkip, version);
+  } catch {
+    // Not remembered: the version is offered again at the next launch.
+  }
+  listeners.forEach((listener) => listener());
+}
+
+/** The version this run already installed by itself: kept outside React, so a remount or a second effect run does not start it twice. */
+let autoTried: string | undefined;
 
 export const checkForUpdate = () => shell?.check();
 export const installUpdate = () => shell?.install();
@@ -180,9 +214,10 @@ function Meter({ update }: { update: UpdateState }) {
   return <progress className="meter-bar" max={update.size} value={update.received ?? 0} aria-hidden />;
 }
 
-/** Settings card inside the apps: the installed version, the state of the update and its one button. */
+/** Settings card inside the apps: the installed version, the state of the update, its one button and whether updates install by themselves. */
 export function UpdateCard() {
   const { t } = useTranslation();
+  const { settings, update: change } = useApp();
   const { update, status, action } = useStatus();
   if (update.phase === "off") return null;
   return (
@@ -198,14 +233,19 @@ export function UpdateCard() {
           </button>
         </div>
       )}
+      <label className="check-line">
+        <input type="checkbox" checked={settings.autoUpdate} onChange={(e) => change({ autoUpdate: e.target.checked })} />
+        <span>{t("update.auto")}<small className="hint">{t(window.ExamUpdates ? "update.autoHintAndroid" : "update.autoHint")}</small></span>
+      </label>
     </section>
   );
 }
 
-/** A quiet line under the subjects once a new version is found, so it is seen without opening the settings. */
+/** A quiet line under the subjects once a new version is found, so it is seen without opening the settings; not for a version skipped for good. */
 export function UpdateLine() {
   const { status, update, action } = useStatus();
-  if (!["available", "downloading", "installing", "ready", "permission"].includes(update.phase)) return null;
+  const skip = useSkipped();
+  if (!["available", "ready", "permission"].includes(update.phase) || (update.phase !== "permission" && update.version === skip)) return null;
   return (
     <p className="get-app" role="status">
       <span>{status}</span>
@@ -215,6 +255,69 @@ export function UpdateLine() {
         </span>
       )}
     </p>
+  );
+}
+
+/**
+ * The download and the install on any screen but the settings (its card shows them): on Windows the installer closes the app, and it should
+ * not come as a surprise.
+ */
+export function UpdateNotice({ top }: { top: boolean }) {
+  const { status, update } = useStatus();
+  if (update.phase !== "downloading" && update.phase !== "installing") return null;
+  return <p className={top ? "notice notice-top" : "notice"} role="status">{status}</p>;
+}
+
+/**
+ * A found version, when nothing on screen may be interrupted (`paused` holds it during a session and on the settings screen): installed by
+ * itself with the "update automatically" setting, otherwise offered in a dialog.
+ */
+export function UpdatePrompt({ auto, paused }: { auto: boolean; paused: boolean }) {
+  const update = useUpdate();
+  const skip = useSkipped();
+  const [answered, setAnswered] = useState<string>();
+  const offer = paused ? undefined : updateOffer(update, { auto, skipped: skip, answered, tried: autoTried });
+  const version = update.version;
+  useEffect(() => {
+    if (offer !== "install" || !version || autoTried === version) return;
+    autoTried = version;
+    installUpdate();
+  }, [offer, version]);
+  if (offer !== "ask" || !version) return null;
+  return (
+    <UpdateDialog
+      key={version} version={version} size={update.size}
+      onLater={(never) => { if (never) skipVersion(version); setAnswered(version); }}
+      // Answered either way: on Android the system installer opens over the page, and a cancelled one leaves the line under the subjects.
+      onInstall={() => { setAnswered(version); installUpdate(); }}
+    />
+  );
+}
+
+/** "Later" closes it for this run, and with "Don't show again" ticked, for good for this version; Esc and the Android Back button count as "Later". */
+function UpdateDialog({ version, size, onLater, onInstall }: { version: string; size?: number; onLater(never: boolean): void; onInstall(): void }) {
+  const { t, i18n } = useTranslation();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const id = useId();
+  const [never, setNever] = useState(false);
+  const later = () => onLater(never);
+  useBackClose(later);
+  useEffect(() => {
+    if (!dialog.current!.open) dialog.current!.showModal();
+  }, []);
+  return (
+    <dialog ref={dialog} className="confirm" aria-labelledby={id} onCancel={(e) => { e.preventDefault(); later(); }}>
+      <h2 id={id}>{size ? t("update.availableSize", { version, size: megabytes(size, i18n.language) }) : t("update.available", { version })}</h2>
+      <p>{t("update.promptBody")}</p>
+      <label className="check-line">
+        <input type="checkbox" checked={never} onChange={(e) => setNever(e.target.checked)} />
+        <span>{t("update.dontShow")}</span>
+      </label>
+      <div className="actions">
+        <button type="button" className="button" onClick={later}>{t("update.later")}</button>
+        <button type="button" className="button primary" autoFocus onClick={onInstall}><Download size={18} strokeWidth={1.5} aria-hidden />{t("update.open")}</button>
+      </div>
+    </dialog>
   );
 }
 

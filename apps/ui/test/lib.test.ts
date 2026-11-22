@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { learn, type BankRef, type ContentIndex, type Entry, type NodeManifest, type NodeRef, type QuestionState, type Session, type SessionItem } from "@exam/core";
-import { KEYS, STATIONS, bankProgress, changeTarget, homeOf, holdExam, showContent, isProgressEvent, lineOf, namesLine, pageAbove, pathNames, sharedKind, shown, shortTitle, stationsOf, wipe } from "../src/lib.ts";
+import { KEYS, STATIONS, awaitsRepeat, bankProgress, changeTarget, homeOf, holdExam, showContent, isProgressEvent, lineOf, namesLine, pageAbove, pathNames, putBackAt, sharedKind, shiftFrom, shown, shortTitle, stationsOf, wipe } from "../src/lib.ts";
 
 /** Names are joined with a dot that stays on the line of the name before it. */
 const dots = (...names: string[]) => names.join(" · ");
@@ -252,6 +252,47 @@ describe("what the result counts as shown", () => {
   test("an exam counts every question, unanswered ones included", () => {
     const s = session("exam", [item(1, right), item(2), item(3)], 0);
     expect(ids(shown(s))).toEqual(["1", "2", "3"]);
+  });
+
+  test("practice finished from a question gone back to still counts the ones skipped before the last answer", () => {
+    // 1 right, 2 skipped, 3 right; the student went back to 1 and finished there
+    const s = session("practice", [item(1, right), item(2), item(3, right), item(4)], 0);
+    expect(ids(shown(s))).toEqual(["1", "2", "3"]);
+  });
+});
+
+describe("going back in practice", () => {
+  const right = { correct: true, score: 1 } as SessionItem["graded"];
+  const wrong = { correct: false, score: 0 } as SessionItem["graded"];
+  const item = (question: number, graded?: SessionItem["graded"], again?: number): SessionItem => ({ question, mode: "choice", graded, again });
+  const practice = (items: SessionItem[]) => ({ config: { kind: "practice" } as Session["config"], items });
+
+  test("a missed question keeps its answer hidden while its repeat is still ahead", () => {
+    const s = practice([item(1, wrong), item(2, right), item(3), item(1, undefined, 1)]);
+    expect(awaitsRepeat(s, 0)).toBe(true);
+    expect(awaitsRepeat(s, 1)).toBe(false);
+    expect(awaitsRepeat(s, 2)).toBe(false);
+  });
+
+  test("a right repeat with one more still queued keeps both earlier answers hidden; answering it opens them", () => {
+    const queued = practice([item(1, wrong), item(2, right), item(1, right, 1), item(3), item(1, undefined, 2)]);
+    expect([0, 2].map((k) => awaitsRepeat(queued, k))).toEqual([true, true]);
+    const answered = practice(queued.items.with(4, item(1, right, 2)));
+    expect([0, 2, 4].map((k) => awaitsRepeat(answered, k))).toEqual([false, false, false]);
+  });
+
+  test("an exam never hides an answer", () => {
+    const s = { config: { kind: "exam" } as Session["config"], items: [item(1, wrong), item(1)] };
+    expect(awaitsRepeat(s, 0)).toBe(false);
+  });
+
+  test("what the screen keeps by position follows its question when a repeat is put back before it", () => {
+    const before = { items: [item(1), item(2), item(3), item(4)], index: 0 };
+    const after = { items: [{ ...before.items[0]!, graded: wrong }, before.items[1]!, item(1, undefined, 1), before.items[2]!, before.items[3]!] };
+    expect(putBackAt(before, after)).toBe(2);
+    expect(putBackAt(before, { items: after.items.toSpliced(2, 1) })).toBe(-1);
+    expect(shiftFrom({ 1: "b", 2: "c", 3: "d" }, 2)).toEqual({ 1: "b", 3: "c", 4: "d" });
+    expect(shiftFrom({ 1: "b" }, -1)).toEqual({ 1: "b" });
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { KEYS, UPDATE_CHECK_EVERY, isCheckDone, isUpdateDue, readUpdateState } from "../src/lib.ts";
+import { KEYS, UPDATE_CHECK_EVERY, isCheckDone, isUpdateDue, readUpdateState, updateOffer, type UpdateState } from "../src/lib.ts";
 
 describe("readUpdateState", () => {
   test("takes the Android shell's JSON text and the desktop's objects alike", () => {
@@ -41,5 +41,39 @@ describe("daily update check", () => {
 
   test("the time of the last check is one of the app's own keys, so deleting all data clears it", () => {
     expect(Object.values(KEYS)).toContain("updateCheck");
+  });
+});
+
+describe("what the app does about a found version", () => {
+  const found: UpdateState = { phase: "available", current: "0.2.0", version: "0.3.0" };
+  const ask = { auto: false };
+
+  test("asks by default, again at the next launch after Later, and installs by itself only with the setting on", () => {
+    expect(updateOffer(found, ask)).toBe("ask");
+    expect(updateOffer(found, { ...ask, answered: "0.3.0" })).toBeUndefined();
+    expect(updateOffer({ ...found, phase: "ready" }, ask)).toBe("ask");
+    expect(updateOffer(found, { auto: true })).toBe("install");
+  });
+
+  test("Don't show again covers only that version: the next one asks again", () => {
+    expect(updateOffer(found, { ...ask, skipped: "0.3.0" })).toBeUndefined();
+    expect(updateOffer({ ...found, version: "0.4.0" }, { ...ask, skipped: "0.3.0" })).toBe("ask");
+  });
+
+  test("installs by itself once a run: a cancelled Android installer that leaves the version ready is not opened again", () => {
+    expect(updateOffer({ ...found, phase: "ready" }, { auto: true, tried: "0.3.0" })).toBeUndefined();
+    expect(updateOffer({ ...found, version: "0.4.0" }, { auto: true, tried: "0.3.0" })).toBe("install");
+  });
+
+  test("nothing while there is no version on offer", () => {
+    for (const phase of ["off", "idle", "checking", "latest", "downloading", "installing", "permission", "failed"] as const) {
+      expect(updateOffer({ phase, version: "0.3.0" }, ask)).toBeUndefined();
+      expect(updateOffer({ phase, version: "0.3.0" }, { auto: true })).toBeUndefined();
+    }
+    expect(updateOffer({ phase: "available" }, ask)).toBeUndefined();
+  });
+
+  test("the skipped version is one of the app's own keys, so deleting all data clears it", () => {
+    expect(Object.values(KEYS)).toContain("updateSkip");
   });
 });

@@ -12,7 +12,8 @@ import { useApp } from "./app.tsx";
 import { Rich } from "./rich.tsx";
 import { Line } from "./line.tsx";
 import { Confirm, useDockHeight } from "./ui.tsx";
-import { STATIONS, buildSession, givenLines, mistakeIds, sessionKey, shown, submitDrafts, toggleChoice, unansweredCount, type Draft, type Setup } from "./lib.ts";
+import { useUpdating } from "./updates.tsx";
+import { STATIONS, awaitsRepeat, buildSession, givenLines, mistakeIds, putBackAt, sessionKey, shiftFrom, shown, submitDrafts, toggleChoice, unansweredCount, type Draft, type Setup } from "./lib.ts";
 
 const number = (id: number) => `№ ${String(id).padStart(3, "0")}`;
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
@@ -194,16 +195,21 @@ export function SessionScreen() {
   const [drafts, setDrafts] = useState<Record<number, Draft>>(running!.drafts ?? {});
   const [asking, setAsking] = useState(false);
   const [allShown, setAllShown] = useState(false);
+  /** The practice question answered last, while the learner is still on it: its feedback stays open even if its repeat is still ahead. */
+  const [fresh, setFresh] = useState<number>();
   /** Where the open question puts its own buttons in the bottom bar. */
   const [dock, setDock] = useState<HTMLElement | null>(null);
   const dockBar = useDockHeight();
   const [now, setNow] = useState(Date.now());
   const states = useMemo(() => project(events, session.bank), [events, session.bank]);
   const rightAnswer = useRightAnswer();
+  const updating = useUpdating();
   const exam = session.config.kind === "exam";
   const done = session.finishedAt != null;
   const locale = settings.content === "auto" ? settings.ui : settings.content;
   const set = (next: Session) => run({ ...running!, session: next });
+  /** Every move to another question goes here: a question left and come back to is no longer the one just answered. */
+  const move = (index: number) => { setFresh(undefined); set(goTo(session, index, Date.now())); };
 
   const eventsOf = (s: Session, indexes: number[]) => {
     const at = Date.now();
@@ -296,6 +302,7 @@ export function SessionScreen() {
     // A round of mistakes is not what the panel asked for, so its result does not offer it "again".
     const begin = (next: Session | undefined, keep = true) => {
       if (!next) return;
+      setFresh(undefined);
       run({ ...running!, session: next, drafts: undefined, setup: keep ? running!.setup : undefined });
       // The address stays `#/session`, so the screen is not told to start at the top.
       scrollTo(0, 0);
@@ -304,7 +311,7 @@ export function SessionScreen() {
     const again = running!.setup != null && another(running!.setup) != null;
     // The buttons that start a session wait while the exam's answers are on their way to the log; a failed write does not hold them, starting writes it again (see `run`).
     const write = exam ? writes[session.id] : undefined;
-    const ready = write !== "saving";
+    const ready = write !== "saving" && !updating;
     return (
       <div className="sheet" data-l={running!.line ?? 0}>
         <h1>{t("result.title")}</h1>
@@ -371,6 +378,7 @@ export function SessionScreen() {
         {wrong.length > 0 && <p className="meta">{t("bank.mistakes")}: {wrong.length}</p>}
         {repeats > 0 && <p className="meta">{t("result.repeated", { count: repeats })}</p>}
         <footer className="dock" ref={dockBar}>
+          {updating && <p className="hint" role="status">{t("update.waitToStart")}</p>}
           <button className={again ? "button quiet" : "button primary"} onClick={leave}>{t("result.toBank")}</button>
           {wrong.length > 0 && <button className="button" disabled={!ready} onClick={() => begin(another(mistakesSetup, wrong), false)}>{t("result.fixMistakes", { n: wrong.length })}</button>}
           {again && <button className="button primary" disabled={!ready} onClick={() => begin(another(running!.setup!))}>{t("result.again")}</button>}
@@ -384,6 +392,7 @@ export function SessionScreen() {
   const prompt = item.mode !== "choice" && "free_input" in q && q.free_input?.question ? q.free_input.question : q.question;
   const last = session.index === session.items.length - 1;
   const locked = !exam && item.graded != null;
+  const hidden = locked && session.index !== fresh && awaitsRepeat(session, session.index);
   const bookmarked = states.get(q.id)?.bookmarked ?? false;
   const unanswered = unansweredCount(session.items, drafts);
   // The options in the order they are drawn: the digit keys count them on screen, so one array serves both.
@@ -409,8 +418,11 @@ export function SessionScreen() {
 
   const answer = (response: Response) => {
     const next = submit(session, q, response, Date.now(), options);
-    setDrafts(({ [session.index]: _sent, ...rest }) => rest);
-    if (!exam) void record(next, [session.index]);
+    // A repeat put back before questions already visited moves what the screen keeps for them along with them.
+    const at = putBackAt(session, next);
+    setDrafts(({ [session.index]: _sent, ...rest }) => shiftFrom(rest, at));
+    setAttempts((old) => shiftFrom(old, at));
+    if (!exam) { setFresh(session.index); void record(next, [session.index]); }
     set(exam && !last ? goTo(next, session.index + 1, Date.now()) : next);
   };
   const toggleBookmark = () => append([{ id: uuidv7(Date.now()), type: "bookmark", at: Date.now(), device: deviceId, bank: session.bank, question: q.id, value: !bookmarked } satisfies ProgressEvent]);
@@ -437,7 +449,7 @@ export function SessionScreen() {
           {session.items.map((entry, k) => (
             <button
               key={k} className={`cell-btn ${k === session.index ? "current" : ""} ${entry.graded ? "done" : ""}`} aria-current={k === session.index ? "step" : undefined}
-              aria-label={t(entry.graded ? "session.paletteDone" : "session.paletteOpen", { n: k + 1 })} onClick={() => set(goTo(session, k, Date.now()))}
+              aria-label={t(entry.graded ? "session.paletteDone" : "session.paletteOpen", { n: k + 1 })} onClick={() => move(k)}
             >{k + 1}</button>
           ))}
         </nav>
@@ -454,19 +466,25 @@ export function SessionScreen() {
         <div className="prompt" lang={language}><Rich text={text(prompt, language)} /></div>
         {fellBack(prompt, language) && <p className="meta">{t("session.shownIn")}: {language.toUpperCase()}</p>}
 
-        <Answer
-          key={`${session.index}:${locked}`} q={q} item={item} order={order} language={language} locked={locked} exam={exam} dock={dock} onSubmit={answer}
-          draft={drafts[session.index] ?? {}} onDraft={(patch) => setDrafts((old) => ({ ...old, [session.index]: { ...old[session.index], ...patch } }))}
-        />
-        {locked && <Feedback q={q} item={item} language={language} bank={session.bank} attempt={attempts[session.index]} />}
+        {hidden ? (
+          <p className="hint" role="status">{t("session.hiddenUntilRepeat")}</p>
+        ) : (
+          <>
+            <Answer
+              key={`${session.index}:${locked}`} q={q} item={item} order={order} language={language} locked={locked} exam={exam} dock={dock} onSubmit={answer}
+              draft={drafts[session.index] ?? {}} onDraft={(patch) => setDrafts((old) => ({ ...old, [session.index]: { ...old[session.index], ...patch } }))}
+            />
+            {locked && <Feedback q={q} item={item} language={language} bank={session.bank} attempt={attempts[session.index]} />}
+          </>
+        )}
       </article>
 
       {/* All the buttons that move the learner on sit in one bar at the bottom, under the thumb; the open question adds its own into `dock-main`. */}
       <footer className="dock" ref={dockBar}>
-        {exam && <button className="button quiet" disabled={session.index === 0} onClick={() => set(goTo(session, session.index - 1, Date.now()))}>{t("session.prev")}</button>}
-        {!locked && !last && <button className="button quiet" onClick={() => set(goTo(session, session.index + 1, Date.now()))}>{t("session.skip")}</button>}
+        <button className="button quiet" disabled={session.index === 0} onClick={() => move(session.index - 1)}>{t("session.prev")}</button>
+        {!locked && !last && <button className="button quiet" onClick={() => move(session.index + 1)}>{t("session.skip")}</button>}
         <div className="dock-main" ref={setDock} />
-        {locked && !last && <button className="button primary" onClick={() => set(goTo(session, session.index + 1, Date.now()))}>{t("session.next")}</button>}
+        {locked && !last && <button className="button primary" onClick={() => move(session.index + 1)}>{t("session.next")}</button>}
         {locked && last && <button className="button primary" onClick={() => end(session)}>{t("session.finish")}</button>}
         {exam && last && <button className="button" onClick={confirmEnd}>{t("session.finish")}</button>}
       </footer>

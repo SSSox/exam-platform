@@ -242,6 +242,15 @@ describe("a missed question comes back inside the sitting", () => {
     expect(single.items).toHaveLength(1);
   });
 
+  test("a miss on a question gone back to is put back after the ones already answered, not among them", () => {
+    let s = createSession("b", bank.slice(0, 10), config, T0, "s");
+    s = answer({ ...s, index: 5 }, true); // 1..5 skipped, 6 answered
+    const sixth = s.items[5];
+    s = answer({ ...s, index: 1 }, false); // back to 2, missed
+    expect(s.items.map((i) => i.question)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 2, 10]);
+    expect(s.items[5]).toBe(sixth);
+  });
+
   test("a question is put back at most a few times in one sitting", () => {
     let s = createSession("b", bank.slice(0, 12), config, T0, "s");
     for (let k = 0; k < 10; k++) {

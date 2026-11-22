@@ -16,6 +16,7 @@ import { SettingsScreen } from "./settings.tsx";
 import { Confirm, Select } from "./ui.tsx";
 import { useHome } from "./home.ts";
 import { takeBack } from "./back.ts";
+import { UpdateNotice, UpdatePrompt } from "./updates.tsx";
 import { LEFTOVERS, fitsBundle, holdExam, keptOnStart, sharedRun, showContent, stepAsync, writePending, type ContentShown, type Draft, type Setup, type WriteState } from "./lib.ts";
 
 const initial = loadSettings();
@@ -329,6 +330,8 @@ export function Root() {
       {app.offline && !inSession && <p className="notice">{t("state.offline")}</p>}
       {restoreFailed && <p className={inSession ? "notice notice-top" : "notice"} role="status">{t("state.restoreFailed")}</p>}
       {saveFailed && <p className={inSession ? "notice notice-top" : "notice"} role="alert">{t("state.saveFailed")}</p>}
+      {path !== "settings" && <UpdateNotice top={!!inSession} />}
+      <UpdatePrompt auto={settings.autoUpdate} paused={path === "session" || path === "settings"} />
       {unsaved && heading != null && (
         <Confirm
           title={t("session.leaveTitle")} body={t("session.leaveBody")} stay={t("session.keepGoing")} go={t("session.leave")}

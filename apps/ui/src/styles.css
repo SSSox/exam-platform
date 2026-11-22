@@ -394,6 +394,9 @@ progress.track::-moz-progress-bar { background: var(--c); border-radius: 3px; }
 .confirm::backdrop { background: rgb(15 16 36 / 0.5); }
 .confirm[open] { display: grid; gap: 12px; animation: rise 260ms var(--out); }
 .confirm p { color: var(--ink-2); font-size: 15px; }
+.check-line { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; cursor: pointer; font-size: 15px; line-height: 22px; }
+.check-line > span { display: grid; gap: 2px; }
+.check-line .hint { font-size: 13px; }
 .verdict { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
 .verdict.ok { color: var(--good-ink); }
 .verdict.bad { color: var(--bad-ink); }

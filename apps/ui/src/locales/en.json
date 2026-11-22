@@ -110,6 +110,7 @@
   },
   "session": {
     "again": "Repeat: you recently made a mistake on this question",
+    "hiddenUntilRepeat": "This question comes back later in the session. Its answer opens once you answer the repeat.",
     "palette": "Questions",
     "paletteOpen": "Question {{n}}",
     "paletteDone": "Question {{n}}, answered",
@@ -231,7 +232,14 @@
     "allow": "Allow",
     "failedNetwork": "Can't reach GitHub, check the internet connection",
     "failedCheck": "The update failed the check. Download the new version from GitHub by hand",
-    "retry": "Check again"
+    "retry": "Check again",
+    "auto": "Update automatically",
+    "autoHint": "A new version downloads and installs by itself, then the app opens again. A test in progress is never interrupted.",
+    "autoHintAndroid": "A new version downloads by itself, and Android asks you to confirm the install. A test in progress is never interrupted.",
+    "promptBody": "Install it now? Your progress and settings stay.",
+    "dontShow": "Don't show again",
+    "later": "Later",
+    "waitToStart": "Updating: you can start a test once it finishes"
   },
   "site": {
     "updateReady": "A new version of the site is ready",

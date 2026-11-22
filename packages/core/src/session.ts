@@ -125,10 +125,13 @@ function requeue(s: Session, at: number): Session {
   if (streak >= RELEARN_RIGHT) return s;
   if (s.items.filter((i) => i.question === item.question).length > MAX_AGAIN) return s;
   if (s.items.slice(at + 1).some((i) => i.question === item.question)) return s;
-  const gap = Math.min(streak === 0 ? 3 : 6, s.items.length - at - 1);
+  // A question answered after going back (one skipped earlier) is counted from the last answered one: the repeat comes after new
+  // questions, never among the ones already answered, so what is kept by position for those stays where it was.
+  const from = Math.max(at, s.items.findLastIndex((i) => i.graded));
+  const gap = Math.min(streak === 0 ? 3 : 6, s.items.length - from - 1);
   if (gap < 1) return s;
   const again: SessionItem = { question: item.question, mode: item.mode, again: (item.again ?? 0) + 1 };
-  return { ...s, items: s.items.toSpliced(at + 1 + gap, 0, again) };
+  return { ...s, items: s.items.toSpliced(from + 1 + gap, 0, again) };
 }
 
 export function goTo(s: Session, index: number, now: number): Session {
