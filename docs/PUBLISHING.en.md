@@ -155,7 +155,7 @@ Once a day, a few seconds after launch or when you return to the app, the Window
 https://github.com/<user>/<code-repo>/releases/latest/download/latest.json
 ```
 
-The address comes from `plugins.updater.endpoints` in `apps/desktop/src-tauri/tauri.conf.json` and is built in at build time, into the APK too. If `latest.json` has a version higher than the installed one, an "Update" button with the file size appears in the settings and under the subject list. Downloading starts only when you press it. The settings also have a "Check for updates" button. The web version does not need automatic updates: every visit opens the fresh build of the site.
+The address comes from `plugins.updater.endpoints` in `apps/desktop/src-tauri/tauri.conf.json` and is built in at build time, into the APK too. If `latest.json` has a version higher than the installed one, the app offers it in a dialog ("Later", "Don't show again" for that version, "Install"), and an "Update" button with the file size appears in the settings and under the subject list. Downloading starts without asking only when "Update automatically" is turned on in the settings (it is off by default). The settings also have a "Check for updates" button. The web version does not need automatic updates: every visit opens the fresh build of the site.
 
 Before installing, the app checks the downloaded file:
 
