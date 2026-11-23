@@ -4,7 +4,7 @@ import { Download, RefreshCw } from "lucide-react";
 import { applySiteUpdate, useSiteUpdate } from "./pwa.ts";
 import { useApp } from "./app.tsx";
 import { useBackClose } from "./ui.tsx";
-import { KEYS, isCheckDone, isUpdateDue, readUpdateState, updateOffer, type UpdateState } from "./lib.ts";
+import { KEYS, isUpdateDue, readUpdateState, updateCheckStamp, updateOffer, type UpdateState } from "./lib.ts";
 
 /**
  * Updates of the Windows and Android apps. The shell finds, downloads and verifies the new version; the page only asks and shows.
@@ -28,9 +28,11 @@ const listeners = new Set<() => void>();
 
 function set(next: UpdateState) {
   state = next;
-  if (isCheckDone(next.phase)) {
+  const stamp = updateCheckStamp(next.phase, Date.now());
+  if (stamp !== undefined) {
     try {
-      localStorage.setItem(KEYS.updateCheck, String(Date.now()));
+      if (stamp === null) localStorage.removeItem(KEYS.updateCheck);
+      else localStorage.setItem(KEYS.updateCheck, stamp);
     } catch {
       // Storage may be full or blocked; the check then simply runs again next launch.
     }
@@ -74,8 +76,11 @@ function skipVersion(version: string) {
   listeners.forEach((listener) => listener());
 }
 
-/** The version this run already installed by itself: kept outside React, so a remount or a second effect run does not start it twice. */
-let autoTried: string | undefined;
+/**
+ * The versions this run already installed by itself: kept outside React, so a remount or a second effect run does not start one twice,
+ * and all of them, so a version that failed is not started again after another one was found in between.
+ */
+const autoTried = new Set<string>();
 
 export const checkForUpdate = () => shell?.check();
 export const installUpdate = () => shell?.install();
@@ -279,8 +284,8 @@ export function UpdatePrompt({ auto, paused }: { auto: boolean; paused: boolean 
   const offer = paused ? undefined : updateOffer(update, { auto, skipped: skip, answered, tried: autoTried });
   const version = update.version;
   useEffect(() => {
-    if (offer !== "install" || !version || autoTried === version) return;
-    autoTried = version;
+    if (offer !== "install" || !version || autoTried.has(version)) return;
+    autoTried.add(version);
     installUpdate();
   }, [offer, version]);
   if (offer !== "ask" || !version) return null;

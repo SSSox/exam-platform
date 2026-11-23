@@ -78,28 +78,33 @@ class AppUpdates(private val activity: Activity, private val page: () -> WebView
     worker.shutdownNow()
   }
 
-  /** One job at a time; a tap while one runs is ignored, the page already shows its progress. */
-  private fun launch(job: () -> Unit) {
+  /**
+   * One job at a time; a tap while one runs is ignored, the page already shows its progress.
+   * The job returns its final state (or null when it has none to report), which goes out only after `busy` is released:
+   * the page may answer it at once (an automatic install), and that request must not find this job still running and be dropped.
+   */
+  private fun launch(job: () -> JSONObject?) {
     if (prefix == null || !busy.compareAndSet(false, true)) return
     try {
       worker.execute {
-        try {
+        val last = try {
           job()
         } catch (e: Exception) {
           // No installer to open, a file the provider refuses and the like: the page gets an error state, not a crashed app.
-          emit(failed("error"))
+          failed("error")
         } finally {
           busy.set(false)
         }
+        last?.let { emit(it) }
       }
     } catch (e: RejectedExecutionException) {
       busy.set(false)
     }
   }
 
-  private fun checkNow() {
+  private fun checkNow(): JSONObject {
     emit(phase("checking"))
-    emit(try {
+    return try {
       val found = fetchCandidate()
       candidate = found
       clearOldFiles(found)
@@ -116,12 +121,16 @@ class AppUpdates(private val activity: Activity, private val page: () -> WebView
       failed("manifest")
     } catch (e: IllegalStateException) {
       failed("manifest")
-    })
+    }
   }
 
-  private fun installNow() {
-    val found = candidate ?: return
-    val next = try {
+  private fun installNow(): JSONObject? {
+    val found = candidate ?: return null
+    return try {
+      // Busy from the tap on, before a kept file is hashed or the first bytes arrive: until then the page would still offer the version
+      // and let a test start under the installer. A kept file of the announced size shows as downloaded while it is checked.
+      val cached = fileFor(found)
+      emit(available(found, "downloading").put("received", if (cached.isFile && cached.length() == found.size) found.size else 0L))
       val file = verifiedFile(found) ?: download(found)
       when {
         !isOurUpdate(file, found) -> {
@@ -133,7 +142,7 @@ class AppUpdates(private val activity: Activity, private val page: () -> WebView
           // `ready` goes out first: if the installer cannot start, its error arrives after it and stays on screen.
           emit(available(found, "ready"))
           launchInstaller(file)
-          return
+          null
         }
       }
     } catch (e: SecurityException) {
@@ -141,7 +150,6 @@ class AppUpdates(private val activity: Activity, private val page: () -> WebView
     } catch (e: IOException) {
       failed("network")
     }
-    emit(next)
   }
 
   /** The newer Android build the manifest announces, or null when this app is up to date or the release has no Android file. */

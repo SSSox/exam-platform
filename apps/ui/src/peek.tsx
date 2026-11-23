@@ -8,6 +8,7 @@ import { Rich } from "./rich.tsx";
 import { Reference, useRightAnswer } from "./session.tsx";
 import { StatusMark } from "./status.tsx";
 import { useBackClose } from "./ui.tsx";
+import { useUpdating } from "./updates.tsx";
 
 interface PeekProps {
   q: Question;
@@ -37,6 +38,8 @@ export function Peek({ q, language, topic, status, due, memory, tries, bookmarke
   const { t } = useTranslation();
   const { text } = useApp();
   const rightAnswer = useRightAnswer();
+  // A new version on its way in would close the app or cover it, so no session starts from here meanwhile (as on the bank's Start).
+  const updating = useUpdating();
   const dialog = useRef<HTMLDialogElement>(null);
   useBackClose(() => dialog.current?.close());
   // The answer is shown for one question only, so stepping to the next one hides it with no flash of the new answer.
@@ -80,8 +83,9 @@ export function Peek({ q, language, topic, status, due, memory, tries, bookmarke
         )}
         {/* The buttons stay at the bottom edge of the dialog, which on a phone is the bottom edge of the screen. */}
         <footer className="peek-foot">
+          {updating && <p className="hint" role="status">{t("update.waitToStart")}</p>}
           <div className="actions">
-            <button className="button primary" onClick={onAnswer} autoFocus>{t("peek.answer")}</button>
+            <button className="button primary" disabled={updating} onClick={onAnswer} autoFocus>{t("peek.answer")}</button>
             <button className="button" aria-expanded={shown} onClick={() => setShownFor(shown ? undefined : q.id)}>{shown ? t("peek.hide") : t("peek.show")}</button>
             <button className="button quiet icon" aria-pressed={bookmarked} onClick={onBookmark}>
               <Bookmark size={18} strokeWidth={1.5} fill={bookmarked ? "currentColor" : "none"} aria-hidden />{bookmarked ? t("session.bookmarked") : t("session.bookmark")}

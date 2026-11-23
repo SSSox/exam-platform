@@ -509,14 +509,29 @@ export const isUpdateDue = (lastCheck: number | undefined, now: number): boolean
 export const isCheckDone = (phase: UpdatePhase): boolean => phase === "latest";
 
 /**
+ * What a new update state does to the time of the last check: "nothing new" stamps it; a found version wipes an older stamp,
+ * so the next launch checks again and offers that version again even within the day; anything else leaves it be.
+ */
+export const updateCheckStamp = (phase: UpdatePhase, now: number): string | null | undefined =>
+  isCheckDone(phase) ? String(now) : phase === "available" || phase === "ready" ? null : undefined;
+
+/**
+ * Whether a found version must wait: during a session, on the settings screen (its card shows the update), and while an exam
+ * kept from the last run is still being restored: until its bank loads the address is not yet the session's, and an
+ * automatic install started then would be cut off by the exam reopening, or would cut the exam off.
+ */
+export const updatesPaused = (path: string, restoring: boolean): boolean => restoring || path === "session" || path === "settings";
+
+/**
  * What the app does about a version the check found, while nothing on screen must not be interrupted: installs it by itself
- * (the "update automatically" setting, once per version a run, so a cancelled Android installer is not opened again and again),
+ * (the "update automatically" setting, once per version a run, so a cancelled or failed install is not started again and again; `tried`
+ * holds every version tried this run, so one that failed is not tried again after another version came and went),
  * asks, or nothing: the version was skipped with "Don't show again" (only that version: the next one asks again), or already
  * answered in this run ("Later", "Install").
  */
-export function updateOffer(state: UpdateState, o: { auto: boolean; skipped?: string; answered?: string; tried?: string }): "install" | "ask" | undefined {
+export function updateOffer(state: UpdateState, o: { auto: boolean; skipped?: string; answered?: string; tried?: ReadonlySet<string> }): "install" | "ask" | undefined {
   if ((state.phase !== "available" && state.phase !== "ready") || !state.version) return undefined;
-  if (o.auto) return state.version === o.tried ? undefined : "install";
+  if (o.auto) return o.tried?.has(state.version) ? undefined : "install";
   return state.version === o.skipped || state.version === o.answered ? undefined : "ask";
 }
 

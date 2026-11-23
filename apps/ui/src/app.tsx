@@ -17,7 +17,7 @@ import { Confirm, Select } from "./ui.tsx";
 import { useHome } from "./home.ts";
 import { takeBack } from "./back.ts";
 import { UpdateNotice, UpdatePrompt } from "./updates.tsx";
-import { LEFTOVERS, fitsBundle, holdExam, keptOnStart, putEvents, sharedRun, showContent, stepAsync, writePending, type ContentShown, type Draft, type Setup, type WriteState } from "./lib.ts";
+import { LEFTOVERS, fitsBundle, holdExam, keptOnStart, putEvents, sharedRun, showContent, stepAsync, updatesPaused, writePending, type ContentShown, type Draft, type Setup, type WriteState } from "./lib.ts";
 
 const initial = loadSettings();
 /** Sets the theme before the first paint; the effect in Root takes over and stops this one's system listener. */
@@ -128,6 +128,11 @@ export function Root() {
   const [saveFailed, setSaveFailed] = useState(false);
   const [running, setRunning] = useState<Running>();
   const [restoreFailed, setRestoreFailed] = useState(false);
+  // An unfinished exam kept from the last run (one that had ended is only written, not reopened) holds updates until it is back or given up.
+  const [restoring, setRestoring] = useState(() => {
+    const saved = loadSavedExam();
+    return saved != null && !saved.pending;
+  });
   const content = useContent();
   // Starting something while a finished exam's answers may not be in the log yet (a failed write, or one still going) writes them first.
   // Their copy lives apart (`KEYS.unwritten`, see `storePending`), so a new exam may take the exam key at once. Practice over an unfinished kept exam drops it.
@@ -177,12 +182,17 @@ export function Root() {
     let live = true;
     client.bank(saved.hash).then((bundle) => {
       if (!fitsBundle(saved.session, bundle)) throw new Error("the bank has changed");
+      if (!live) return;
+      // From here the session's own pause holds updates: the address below is set in the same step.
+      setRestoring(false);
       // Something else was started while the bank was loading: the kept exam was dropped then, and it stays dropped.
-      if (!live || loadSavedExam()?.session.id !== saved.session.id) return;
+      if (loadSavedExam()?.session.id !== saved.session.id) return;
       location.hash = "#/session";
       setRunning((now) => now ?? { session: saved.session, bundle, back: saved.back, line: saved.line, hash: saved.hash, drafts: saved.drafts });
     }).catch(() => {
-      if (!live || loadSavedExam()?.session.id !== saved.session.id) return;
+      if (!live) return;
+      setRestoring(false);
+      if (loadSavedExam()?.session.id !== saved.session.id) return;
       clearSavedExam();
       setRestoreFailed(true);
     });
@@ -329,7 +339,7 @@ export function Root() {
       {restoreFailed && <p className={inSession ? "notice notice-top" : "notice"} role="status">{t("state.restoreFailed")}</p>}
       {saveFailed && <p className={inSession ? "notice notice-top" : "notice"} role="alert">{t("state.saveFailed")}</p>}
       {path !== "settings" && <UpdateNotice top={!!inSession} />}
-      <UpdatePrompt auto={settings.autoUpdate} paused={path === "session" || path === "settings"} />
+      <UpdatePrompt auto={settings.autoUpdate} paused={updatesPaused(path, restoring)} />
       {unsaved && heading != null && (
         <Confirm
           title={t("session.leaveTitle")} body={t("session.leaveBody")} stay={t("session.keepGoing")} go={t("session.leave")}
