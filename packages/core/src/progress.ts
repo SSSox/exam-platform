@@ -39,8 +39,10 @@ export function revision(q: Question): string {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
+/** The first event seen for an id wins: the caller passes the log it already has first, so an imported file that reuses ids cannot rewrite history. */
 export function mergeLogs(...logs: ProgressEvent[][]): ProgressEvent[] {
-  const byId = new Map(logs.flat().map((e) => [e.id, e]));
+  const byId = new Map<string, ProgressEvent>();
+  for (const e of logs.flat()) if (!byId.has(e.id)) byId.set(e.id, e);
   return [...byId.values()].sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : 1));
 }
 

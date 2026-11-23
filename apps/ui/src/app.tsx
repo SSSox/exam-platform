@@ -17,7 +17,7 @@ import { Confirm, Select } from "./ui.tsx";
 import { useHome } from "./home.ts";
 import { takeBack } from "./back.ts";
 import { UpdateNotice, UpdatePrompt } from "./updates.tsx";
-import { LEFTOVERS, fitsBundle, holdExam, keptOnStart, sharedRun, showContent, stepAsync, writePending, type ContentShown, type Draft, type Setup, type WriteState } from "./lib.ts";
+import { LEFTOVERS, fitsBundle, holdExam, keptOnStart, putEvents, sharedRun, showContent, stepAsync, writePending, type ContentShown, type Draft, type Setup, type WriteState } from "./lib.ts";
 
 const initial = loadSettings();
 /** Sets the theme before the first paint; the effect in Root takes over and stops this one's system listener. */
@@ -194,10 +194,11 @@ export function Root() {
     return () => clearTimeout(timer);
   }, [restoreFailed]);
 
-  // Answers given before the stored log is read are kept: the two lists are merged, not swapped.
+  // Answers given before the stored log is read are kept: the two lists are merged, not swapped. The stored rows go first, so an
+  // event imported meanwhile under an id the database already holds gives way to the stored one.
   useEffect(() => {
     loadEvents().then((stored) => {
-      const merged = mergeLogs(latest.current.events, stored);
+      const merged = mergeLogs(stored, latest.current.events);
       latest.current.events = merged;
       setEvents(merged);
       setLog("read");
@@ -238,25 +239,22 @@ export function Root() {
    */
   const flushLeftovers = useRef(() => {});
   const put = useCallback(async (added: ProgressEvent[]) => {
-    const before = latest.current.events;
-    const merged = mergeLogs(before, added);
-    latest.current.events = merged;
-    setEvents(merged);
-    let saved = true;
-    try {
-      await saveEvents(added);
+    const memory = { get: () => latest.current.events, set: (events: ProgressEvent[]) => {
+      latest.current.events = events;
+      setEvents(events);
+    } };
+    const done = await putEvents(memory, added, saveEvents);
+    if (done.saved) {
       // After the first answer the browser kept, the log is asked not to be cleared under storage pressure. Firefox shows a prompt for it,
       // so there it is asked when the learner saves their progress to a file (`settings.tsx`).
       if (!persistOnClick() && added.some((e) => e.type === "attempt")) requestPersistence();
       flushLeftovers.current();
-    } catch {
-      saved = false;
-      setSaveFailed(true);
-    }
-    return { count: merged.length - before.length, saved };
+    } else setSaveFailed(true);
+    return done;
   }, []);
   const append = useCallback(async (added: ProgressEvent[]) => (await put(added)).count, [put]);
-  const commit = useCallback(async (added: ProgressEvent[]) => (await put(added)).saved, [put]);
+  // A finished exam's answers count as written only when the database holds these very events, not other ones under their ids.
+  const commit = useCallback(async (added: ProgressEvent[]) => (await put(added)).holds, [put]);
 
   // One write per exam at a time: every practice answer calls `run` again, and each would otherwise start the same write anew.
   const inFlight = useRef(new Map<string, Promise<boolean>>());

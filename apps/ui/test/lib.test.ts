@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { learn, type BankRef, type ContentIndex, type Entry, type NodeManifest, type NodeRef, type QuestionState, type Session, type SessionItem } from "@exam/core";
-import { KEYS, STATIONS, awaitsRepeat, bankProgress, changeTarget, homeOf, holdExam, showContent, isProgressEvent, lineOf, namesLine, pageAbove, pathNames, putBackAt, sharedKind, shiftFrom, shown, shortTitle, stationsOf, wipe } from "../src/lib.ts";
+import { examHistory, learn, type BankRef, type ContentIndex, type Entry, type NodeManifest, type NodeRef, type ProgressEvent, type QuestionState, type Session, type SessionItem } from "@exam/core";
+import { KEYS, STATIONS, addMissing, putEvents, shortDate, awaitsRepeat, bankProgress, changeTarget, homeOf, holdExam, showContent, isProgressEvent, lineOf, namesLine, pageAbove, pathNames, putBackAt, sharedKind, shiftFrom, shown, shortTitle, stationsOf, wipe } from "../src/lib.ts";
 
 /** Names are joined with a dot that stays on the line of the name before it. */
 const dots = (...names: string[]) => names.join(" · ");
@@ -165,6 +165,15 @@ describe("isProgressEvent", () => {
     expect(isProgressEvent({ ...attempt, type: "other" })).toBe(false);
     expect(isProgressEvent({ ...attempt, question: "3" })).toBe(false);
     expect(isProgressEvent({ ...attempt, question: 3.5 })).toBe(false);
+  });
+
+  test("a time a date cannot hold is refused, the ends of the range are kept", () => {
+    expect(isProgressEvent({ ...attempt, at: 8.64e15 + 1 })).toBe(false);
+    expect(isProgressEvent({ ...attempt, at: 1e300 })).toBe(false);
+    expect(isProgressEvent({ ...attempt, at: -1 })).toBe(false);
+    expect(isProgressEvent({ ...attempt, at: "1" })).toBe(false);
+    expect(isProgressEvent({ ...attempt, at: 8.64e15 })).toBe(true);
+    expect(isProgressEvent({ ...attempt, at: 0 })).toBe(true);
   });
 
   test("a time or question that is not a finite number is refused: 1e999 parses to Infinity", () => {
@@ -340,5 +349,131 @@ describe("showContent", () => {
     expect(showContent({ index: a, offline: false }, { failed: new Error("x") })).toEqual({ index: a, offline: true });
     const error = new Error("x");
     expect(showContent(empty, { failed: error })).toEqual({ offline: false, error });
+  });
+});
+
+describe("addMissing", () => {
+  const event = (id: string, at: number) => ({ id, type: "bookmark", at, device: "d", bank: "b", question: 1, value: true }) as ProgressEvent;
+  const table = (stored: ProgressEvent[]) => {
+    const rows = new Map(stored.map((e) => [e.id, e]));
+    return {
+      rows,
+      bulkGet: async (keys: string[]) => keys.map((k) => rows.get(k)),
+      bulkAdd: async (items: ProgressEvent[]) => {
+        for (const e of items) {
+          if (rows.has(e.id)) throw new Error("ConstraintError");
+          rows.set(e.id, e);
+        }
+      },
+    };
+  };
+
+  test("a stored record is never overwritten; only new ids are added, the stored ones are returned", async () => {
+    const kept = event("a", 1);
+    const t = table([kept]);
+    const { added, existing } = await addMissing(t, [event("a", 99), event("b", 2)]);
+    expect(added.map((e) => e.id)).toEqual(["b"]);
+    expect(existing).toEqual([kept]);
+    expect(t.rows.get("a")).toBe(kept);
+    expect([...t.rows.keys()]).toEqual(["a", "b"]);
+  });
+
+  test("an answer that is in memory but not yet in the table is written", async () => {
+    const t = table([]);
+    const unwritten = event("u", 3);
+    expect(await addMissing(t, [unwritten])).toEqual({ added: [unwritten], existing: [] });
+    expect(t.rows.get("u")).toBe(unwritten);
+  });
+
+  test("an id repeated in one batch is added once, the first one wins", async () => {
+    const t = table([]);
+    const first = event("a", 1);
+    await addMissing(t, [first, event("a", 2)]);
+    expect(t.rows.get("a")).toBe(first);
+  });
+});
+
+describe("putEvents", () => {
+  const answer = (id: string, correct: boolean) => ({ id, type: "attempt", at: 1, device: "d", bank: "b", question: 1, rev: "r", mode: "typed", correct, score: correct ? 1 : 0, matchKind: "exact", response: { mode: "typed", texts: [correct ? "x" : "y"] }, locale: "ru", session: "s", ms: 5 }) as ProgressEvent;
+  /** A database that hands back copies, as IndexedDB does, and can be made to fail. */
+  const database = (stored: ProgressEvent[] = []) => {
+    const rows = new Map(stored.map((e) => [e.id, structuredClone(e)]));
+    const db = {
+      rows,
+      down: false,
+      save: (events: ProgressEvent[]) => {
+        if (db.down) return Promise.reject(new Error("QuotaExceededError"));
+        return addMissing({
+          bulkGet: async (keys) => keys.map((k) => (rows.has(k) ? structuredClone(rows.get(k)!) : undefined)),
+          bulkAdd: async (items) => void items.forEach((e) => rows.set(e.id, structuredClone(e))),
+        }, events);
+      },
+    };
+    return db;
+  };
+  const memory = (events: ProgressEvent[] = []) => {
+    const m = { events, get: () => m.events, set: (next: ProgressEvent[]) => void (m.events = next) };
+    return m;
+  };
+
+  test("an answer whose first write failed keeps its id against an edited file, and the retry lets it go only once stored", async () => {
+    const db = database();
+    const log = memory();
+    const real = answer("a", false);
+    db.down = true;
+    expect(await putEvents(log, [real], db.save)).toMatchObject({ saved: false, holds: false });
+    db.down = false;
+    // The edited file arrives before the retry: what is written under the id is the answer, not the file's copy.
+    const forged = answer("a", true);
+    await putEvents(log, [forged], db.save);
+    expect(db.rows.get("a")).toEqual(real);
+    expect(log.events).toEqual([real]);
+    expect(await putEvents(log, [real], db.save)).toEqual({ count: 0, saved: true, holds: true });
+  });
+
+  test("a pending answer is not let go when the database holds another event under its id", async () => {
+    const db = database([answer("a", true)]);
+    const real = answer("a", false);
+    const log = memory([real]);
+    expect(await putEvents(log, [real], db.save)).toMatchObject({ saved: true, holds: false });
+  });
+
+  test("an import gives way to a stored row the log in memory does not have yet, and counts only the rows it added", async () => {
+    const stored = answer("a", false);
+    const db = database([stored]);
+    const log = memory();
+    const result = await putEvents(log, [answer("a", true), answer("b", true)], db.save);
+    expect(result).toEqual({ count: 1, saved: true, holds: false });
+    expect(db.rows.get("a")).toEqual(stored);
+    expect(log.events.find((e) => e.id === "a")).toEqual(stored);
+    expect(log.events.map((e) => e.id)).toEqual(["a", "b"]);
+  });
+
+  test("without a database the events stay in memory and count as new", async () => {
+    const db = database();
+    db.down = true;
+    const log = memory();
+    expect(await putEvents(log, [answer("a", true)], db.save)).toEqual({ count: 1, saved: false, holds: false });
+    expect(log.events).toHaveLength(1);
+  });
+});
+
+describe("shortDate", () => {
+  const now = new Date(2026, 5, 1, 12).getTime();
+
+  test("a mock exam already stored with a time a date cannot hold shows a dash instead of throwing", () => {
+    const at = 8.64e15 + 1;
+    const log = [{ id: "a", type: "attempt", at, device: "d", bank: "b", question: 1, rev: "r", mode: "choice", correct: true, score: 1, matchKind: "exact", response: { mode: "choice", selected: ["a"] }, locale: "ru", session: "s", ms: 1, exam: true, of: 1 }] as ProgressEvent[];
+    const [h] = examHistory(log, "b");
+    expect(h!.at).toBe(at);
+    expect(() => new Intl.DateTimeFormat("ru", { day: "numeric" }).format(at)).toThrow(RangeError);
+    expect(shortDate(h!.at, now, "ru")).toBe("—");
+    expect(shortDate(-1, now, "en")).toBe("—");
+    expect(shortDate(NaN, now, "en")).toBe("—");
+  });
+
+  test("the year is shown only when it is not this one", () => {
+    expect(shortDate(new Date(2026, 2, 5, 12).getTime(), now, "en")).toBe("Mar 5");
+    expect(shortDate(new Date(2024, 2, 5, 12).getTime(), now, "en")).toBe("Mar 5, 2024");
   });
 });

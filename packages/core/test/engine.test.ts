@@ -155,6 +155,14 @@ describe("progress log", () => {
     expect(project(merged, "b").get(1)!.modes.choice).toMatchObject({ attempts: 3, correct: 2, streak: 0, lastCorrect: false });
   });
 
+  test("an event that reuses a known id does not replace it: the first one wins", () => {
+    const kept = [attempt("a", 1, 1, "choice", true)];
+    const forged = [attempt("a", 5, 1, "choice", false), attempt("b", 2, 1, "choice", true)];
+    const merged = mergeLogs(kept, forged);
+    expect(merged.map((e) => e.id)).toEqual(["a", "b"]);
+    expect(merged[0]).toBe(kept[0]);
+  });
+
   test("mastery is tracked per answer mode", () => {
     const log = [attempt("a", 1, 1, "choice", true), attempt("b", 2, 1, "choice", true), attempt("c", 3, 2, "typed", true), attempt("d", 4, 3, "choice", true)];
     const states = project(log, "b");

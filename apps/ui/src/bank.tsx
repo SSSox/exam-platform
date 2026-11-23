@@ -12,7 +12,7 @@ import { Peek } from "./peek.tsx";
 import { STATUSES, StatusMark } from "./status.tsx";
 import { Stops, stopsOf } from "./stops.tsx";
 import { useUpdating } from "./updates.tsx";
-import { buildSession, examProfile, findQuestions, fitSetup, homeOf, lineOf, pageAbove, pathNames, searchable, stationsOf, type Setup } from "./lib.ts";
+import { buildSession, examProfile, findQuestions, fitSetup, homeOf, lineOf, pageAbove, pathNames, searchable, shortDate, stationsOf, type Setup } from "./lib.ts";
 
 type Filter = QuestionStatus | "due" | null;
 type Scope = "smart" | "all" | "mistakes" | "bookmarks";
@@ -227,10 +227,6 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
     }
   };
   const history = examHistory(events, bank.id).slice(0, 5);
-  const shortDate = (at: number) => {
-    const year = new Date(at).getFullYear() === new Date(now).getFullYear() ? undefined : "numeric";
-    return new Intl.DateTimeFormat(settings.ui, { day: "numeric", month: "short", year }).format(at);
-  };
 
   const toggleBookmark = (q: Question) => void append([{ id: uuidv7(Date.now()), type: "bookmark", at: Date.now(), device: deviceId, bank: bank.id, question: q.id, value: !states.get(q.id)?.bookmarked }]);
   const opened = open != null ? active.find((q) => q.id === open) : undefined;
@@ -279,7 +275,7 @@ export function BankScreen({ node, bank: bankId }: { node: string; bank: string 
           <ol>
             {history.map((h) => (
               <li key={h.session}>
-                <span>{shortDate(h.at)}</span>
+                <span>{shortDate(h.at, now, settings.ui)}</span>
                 <span>{t("bank.examScore", { correct: h.correct, total: h.of })}</span>
                 <strong>{h.percent}%</strong>
               </li>

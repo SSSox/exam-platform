@@ -1,4 +1,4 @@
-import { LEARNED_BOX, createSession, entriesOf, goTo, isDue, isFork, modeFor, pickAdaptive, shuffled, strength, submit, type AnswerMode, type BankBundle, type BankStats, type ContentIndex, type Entry, type NodeManifest, type NodeRef, type ProgressEvent, type QuestionState, type Response, type Session, type SessionConfig, type SessionItem, type Target } from "@exam/core";
+import { LEARNED_BOX, createSession, entriesOf, goTo, isDue, isFork, mergeLogs, modeFor, pickAdaptive, shuffled, strength, submit, type AnswerMode, type BankBundle, type BankStats, type ContentIndex, type Entry, type NodeManifest, type NodeRef, type ProgressEvent, type QuestionState, type Response, type Session, type SessionConfig, type SessionItem, type Target } from "@exam/core";
 import type { Localized, Question } from "@exam/schema";
 
 /**
@@ -48,14 +48,89 @@ export async function wipe(tables: { clear(): Promise<unknown> }[], storage: Pic
   for (const key of Object.values(KEYS)) storage.removeItem(key);
 }
 
+/** The latest moment a JavaScript date can hold, in milliseconds. */
+const MAX_TIME = 8.64e15;
+
+/** What a write to the stored log did: the events it added, and the rows it found already stored under the other ids. */
+export interface Stored { added: ProgressEvent[]; existing: ProgressEvent[] }
+
+/**
+ * Stores the events whose id the table does not hold yet; a stored record is never overwritten, and the ones found are returned beside the added.
+ * The check looks at the table, not at the log in memory: answers whose first write failed are already in memory and still have to be written.
+ * The caller runs this in one read-write transaction, so nothing can slip in between the lookup and the write.
+ */
+export async function addMissing(table: { bulkGet(keys: string[]): Promise<(ProgressEvent | undefined)[]>; bulkAdd(items: ProgressEvent[]): Promise<unknown> }, events: ProgressEvent[]): Promise<Stored> {
+  // The first of repeated ids in one batch wins, as in `mergeLogs`; adding both would fail the whole batch.
+  const seen = new Set<string>();
+  const unique = events.filter((e) => !seen.has(e.id) && !!seen.add(e.id));
+  const found = await table.bulkGet(unique.map((e) => e.id));
+  const added = unique.filter((_, i) => found[i] === undefined);
+  if (added.length) await table.bulkAdd(added);
+  return { added, existing: found.filter((e) => e !== undefined) };
+}
+
+/** Whether two events say the same thing, field by field (a row read back from the database is a copy, never the same object). */
+export function sameEvent(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null || Array.isArray(a) !== Array.isArray(b)) return false;
+  const x = a as Record<string, unknown>, y = b as Record<string, unknown>;
+  const keys = Object.keys(x);
+  return keys.length === Object.keys(y).length && keys.every((k) => Object.hasOwn(y, k) && sameEvent(x[k], y[k]));
+}
+
+/** The log in memory, as `putEvents` reads and replaces it. */
+export interface Memory { get(): ProgressEvent[]; set(events: ProgressEvent[]): void }
+
+/**
+ * Adds events to the log in memory and to the stored one. Says how many were new, whether the write got through, and whether the store
+ * now holds exactly the events given (a finished exam's answers are let go only then).
+ * An event the log already knows wins over a file that reuses its id: in memory, and in what is written, so an answer whose first write failed
+ * is written as given even when an edited file brought its id first. A row the database already holds wins over both: an import made before
+ * the stored log was read, or one another tab wrote, cannot put a different event into the history shown and exported.
+ */
+export async function putEvents(memory: Memory, events: ProgressEvent[], save: (events: ProgressEvent[]) => Promise<Stored>): Promise<{ count: number; saved: boolean; holds: boolean }> {
+  const before = memory.get();
+  const merged = mergeLogs(before, events);
+  memory.set(merged);
+  const byId = new Map(merged.map((e) => [e.id, e]));
+  const wanted = [...new Set(events.map((e) => e.id))].map((id) => byId.get(id)!);
+  let stored: Stored;
+  try {
+    stored = await save(wanted);
+  } catch {
+    return { count: merged.length - before.length, saved: false, holds: false };
+  }
+  const now = memory.get();
+  // One lookup table, not a scan per row: re-importing a full backup finds every row already stored.
+  const known = new Map(now.map((e) => [e.id, e]));
+  const differs = stored.existing.filter((row) => {
+    const held = known.get(row.id);
+    return !held || !sameEvent(held, row);
+  });
+  if (differs.length) memory.set(mergeLogs(differs, now));
+  const rows = new Map([...stored.added, ...stored.existing].map((e) => [e.id, e]));
+  return { count: stored.added.length, saved: true, holds: events.every((e) => sameEvent(rows.get(e.id), e)) };
+}
+
+/**
+ * The date of a mock exam in the bank's history. A time a date cannot hold gives a dash: older versions let such events into the log,
+ * and the stored log is kept as it is, so the bank page must not throw on them.
+ */
+export function shortDate(at: number, now: number, locale: string): string {
+  if (!(at >= 0 && at <= MAX_TIME)) return "—";
+  const year = new Date(at).getFullYear() === new Date(now).getFullYear() ? undefined : "numeric";
+  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year }).format(at);
+}
+
 /**
  * Whether a value read from an imported progress file is an event the log can hold.
  * Numbers must be finite: JSON turns `1e999` into Infinity, and an attempt at "the end of time" would sort last and count as the newest.
+ * The time must also be one a date can hold (0..8.64e15 ms), or formatting the mock-exam history throws on every visit to the bank.
  */
 export function isProgressEvent(e: unknown): e is ProgressEvent {
   if (typeof e !== "object" || e === null) return false;
   const x = e as Record<string, unknown>;
-  if (typeof x.id !== "string" || !Number.isFinite(x.at) || typeof x.bank !== "string") return false;
+  if (typeof x.id !== "string" || typeof x.at !== "number" || !(x.at >= 0 && x.at <= MAX_TIME) || typeof x.bank !== "string") return false;
   if (x.type === "dispute") return Number.isSafeInteger(x.question) && typeof x.attempt === "string";
   if (x.type === "bookmark") return Number.isSafeInteger(x.question) && typeof x.value === "boolean";
   return x.type === "attempt" && Number.isSafeInteger(x.question) && typeof x.correct === "boolean" && typeof x.mode === "string" && ["choice", "typed", "self_check"].includes(x.mode);

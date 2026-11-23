@@ -1,6 +1,6 @@
 import Dexie from "dexie";
 import { ContentClient, uuidv7, type Http, type KeyValue, type ProgressEvent } from "@exam/core";
-import { KEYS, isFirefox, isShell, parseSavedExam, parseUnwritten, pinnedBanks, withUnwritten, withoutWritten, setupOf, storeSetup, wipe, type SavedExam, type Setup } from "./lib.ts";
+import { KEYS, addMissing, isFirefox, isShell, parseSavedExam, parseUnwritten, pinnedBanks, withUnwritten, withoutWritten, setupOf, storeSetup, wipe, type SavedExam, type Setup, type Stored } from "./lib.ts";
 
 const db = new Dexie("exam-platform");
 db.version(1).stores({ kv: "", events: "id" });
@@ -37,7 +37,8 @@ export const client = new ContentClient([...__CONTENT_URLS__], http, cache, {
 });
 
 export const loadEvents = (): Promise<ProgressEvent[]> => db.table("events").toArray();
-export const saveEvents = (events: ProgressEvent[]) => db.table("events").bulkPut(events);
+/** Adds only events the log has not stored and returns the rows it found under the other ids; an imported file that reuses ids must not rewrite history. */
+export const saveEvents = (events: ProgressEvent[]): Promise<Stored> => db.transaction("rw", db.table("events"), () => addMissing(db.table("events"), events));
 /** Everything the app stored: the log, the downloaded banks, settings and the remembered place. The caller reloads the page, so nothing held in memory writes it back. */
 export const clearAppData = () => wipe([db.table("kv"), db.table("events")], localStorage);
 
