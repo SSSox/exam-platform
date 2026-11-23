@@ -169,6 +169,7 @@
     "fixMistakes": "Retry mistakes ({{n}})",
     "yourAnswer": "Your answer",
     "notSaved": "Answers not saved",
+    "saving": "Saving your answers…",
     "saveAgain": "Save again"
   },
   "settings": {

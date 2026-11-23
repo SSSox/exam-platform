@@ -13,7 +13,7 @@ import { Rich } from "./rich.tsx";
 import { Line } from "./line.tsx";
 import { Confirm, useDockHeight } from "./ui.tsx";
 import { useUpdating } from "./updates.tsx";
-import { STATIONS, awaitsRepeat, buildSession, givenLines, mistakeIds, putBackAt, sessionKey, shiftFrom, shown, submitDrafts, toggleChoice, unansweredCount, type Draft, type Setup } from "./lib.ts";
+import { STATIONS, awaitsRepeat, buildSession, centeredLeft, givenLines, landOnQuestion, mistakeIds, putBackAt, questionChanged, questionKey, sessionKey, shiftFrom, shown, submitDrafts, toggleChoice, unansweredCount, type Draft, type Setup } from "./lib.ts";
 
 const number = (id: number) => `№ ${String(id).padStart(3, "0")}`;
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
@@ -281,8 +281,23 @@ export function SessionScreen() {
   // The row of question numbers scrolls sideways on a phone: keep the open question in view.
   const palette = useRef<HTMLElement>(null);
   useEffect(() => {
-    palette.current?.querySelector(".current")?.scrollIntoView({ inline: "center", block: "nearest" });
+    const row = palette.current;
+    const cell = row?.querySelector(".current");
+    if (!row || !cell) return;
+    const box = row.getBoundingClientRect();
+    row.scrollTo({ left: centeredLeft({ left: box.left, width: box.width, scrollLeft: row.scrollLeft }, cell.getBoundingClientRect()) });
   }, [session.index]);
+
+  // Another question starts at the top of the page. The first render of the sitting is left alone: the route change already scrolled,
+  // and a typed question focuses its field. This runs after the children's own effects, so a field that took focus keeps it.
+  const promptBox = useRef<HTMLDivElement>(null);
+  const shownQuestion = useRef({ id: session.id, index: session.index });
+  useEffect(() => {
+    const before = shownQuestion.current;
+    shownQuestion.current = { id: session.id, index: session.index };
+    if (done || !questionChanged(before, shownQuestion.current)) return;
+    landOnQuestion(window, promptBox.current, document.activeElement?.closest(`#${ANSWER_FORM} input:not([readonly])`) != null);
+  }, [session.id, session.index, done]);
 
   if (done) {
     keys.current = undefined;
@@ -379,6 +394,8 @@ export function SessionScreen() {
         {repeats > 0 && <p className="meta">{t("result.repeated", { count: repeats })}</p>}
         <footer className="dock" ref={dockBar}>
           {updating && <p className="hint" role="status">{t("update.waitToStart")}</p>}
+          {/* Says why the buttons that start a session wait (see `ready`); a failed write has its own message above. */}
+          {write === "saving" && <p className="hint" role="status">{t("result.saving")}</p>}
           <button className={again ? "button quiet" : "button primary"} onClick={leave}>{t("result.toBank")}</button>
           {wrong.length > 0 && <button className="button" disabled={!ready} onClick={() => begin(another(mistakesSetup, wrong), false)}>{t("result.fixMistakes", { n: wrong.length })}</button>}
           {again && <button className="button primary" disabled={!ready} onClick={() => begin(another(running!.setup!))}>{t("result.again")}</button>}
@@ -463,7 +480,7 @@ export function SessionScreen() {
           </button>
         </div>
         {item.again != null && <p className="chip again">{t("session.again")}</p>}
-        <div className="prompt" lang={language}><Rich text={text(prompt, language)} /></div>
+        <div className="prompt" key={questionKey(session)} lang={language} ref={promptBox} tabIndex={-1}><Rich text={text(prompt, language)} /></div>
         {fellBack(prompt, language) && <p className="meta">{t("session.shownIn")}: {language.toUpperCase()}</p>}
 
         {hidden ? (

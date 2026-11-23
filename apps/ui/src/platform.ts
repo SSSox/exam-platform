@@ -1,6 +1,6 @@
 import Dexie from "dexie";
 import { ContentClient, uuidv7, type Http, type KeyValue, type ProgressEvent } from "@exam/core";
-import { KEYS, addMissing, isFirefox, isShell, parseSavedExam, parseUnwritten, pinnedBanks, withUnwritten, withoutWritten, setupOf, storeSetup, wipe, type SavedExam, type Setup, type Stored } from "./lib.ts";
+import { KEYS, addMissing, isFirefox, isShell, parseSavedExam, parseUnwritten, pinnedBanks, withUnwritten, withoutWritten, setupOf, storeSetup, themeColors, wipe, type SavedExam, type Setup, type Stored } from "./lib.ts";
 
 const db = new Dexie("exam-platform");
 db.version(1).stores({ kv: "", events: "id" });
@@ -117,6 +117,9 @@ export const inShell = (): boolean => isShell(location.hostname, window);
 
 /** Puts the chosen theme on the page: "system" follows the operating system and keeps following it while the page is open. */
 export function applyTheme(theme: Theme): () => void {
+  // The browser's bar follows the in-app choice too; for the system theme the tags' own media queries pick the colour.
+  const metas = [...document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')];
+  themeColors(theme, metas.map((meta) => meta.media)).forEach((color, i) => { metas[i]!.content = color; });
   const set = () => {
     const shown = theme === "system" ? (prefersDark().matches ? "dark" : "light") : theme;
     document.documentElement.dataset.theme = shown;

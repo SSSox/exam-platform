@@ -39,6 +39,10 @@ export interface Session {
   config: SessionConfig;
   items: SessionItem[];
   index: number;
+  /** The furthest position shown so far (absent until the first move): going back does not lower it, and a repeat put back before it moves it along. */
+  reached?: number;
+  /** Positions behind `reached` that hold a repeat put back there and not opened yet: the learner moved past that place before the repeat was in it. */
+  unseen?: number[];
   startedAt: number;
   shownAt: number;
   finishedAt?: number;
@@ -131,12 +135,18 @@ function requeue(s: Session, at: number): Session {
   const gap = Math.min(streak === 0 ? 3 : 6, s.items.length - from - 1);
   if (gap < 1) return s;
   const again: SessionItem = { question: item.question, mode: item.mode, again: (item.again ?? 0) + 1 };
-  return { ...s, items: s.items.toSpliced(from + 1 + gap, 0, again) };
+  const place = from + 1 + gap;
+  // The question the learner had reached moves one place along with the rest, so the mark stays on it. A repeat put in at or before
+  // that mark lands in a stretch already moved through, so it is noted as not opened until the learner goes to it.
+  const behind = s.reached != null && s.reached >= place;
+  const unseen = (s.unseen ?? []).map((k) => (k >= place ? k + 1 : k)).concat(behind ? [place] : []);
+  return { ...s, items: s.items.toSpliced(place, 0, again), ...(behind && { reached: s.reached! + 1 }), ...(unseen.length > 0 && { unseen }) };
 }
 
 export function goTo(s: Session, index: number, now: number): Session {
   if (index < 0 || index >= s.items.length) return s;
-  return { ...s, index, shownAt: now };
+  const unseen = s.unseen?.filter((k) => k !== index);
+  return { ...s, index, reached: Math.max(s.reached ?? s.index, index), shownAt: now, ...(unseen && { unseen }) };
 }
 
 export const finish = (s: Session, now: number): Session => (s.finishedAt != null ? s : { ...s, finishedAt: now });

@@ -2,14 +2,15 @@ import { LEARNED_BOX, createSession, entriesOf, goTo, isDue, isFork, mergeLogs, 
 import type { Localized, Question } from "@exam/schema";
 
 /**
- * What the result counts as shown. An exam counts every question, answered or not. In practice an item behind the current one, or
- * behind the last answer, was answered or skipped; the ones ahead, repeats queued after a miss among them, were never shown. Leaving early
- * is not a miss, nor is the open question left unanswered when the student finishes.
+ * What the result counts as shown. An exam counts every question, answered or not. In practice an item behind the furthest one reached,
+ * or behind the last answer, was answered or skipped; the ones ahead, repeats queued after a miss among them, were never shown. Leaving early
+ * is not a miss, nor is the open question left unanswered when the student finishes. A repeat put back among questions skipped earlier
+ * lies behind the furthest one reached without having been shown (`unseen`) until the learner goes to it.
  */
-export const shown = (s: Pick<Session, "config" | "items" | "index">) => {
-  // Practice can be finished from a question gone back to: what lies before the last answer was passed all the same.
-  const passed = Math.max(s.index, s.items.findLastIndex((item) => item.graded));
-  return s.items.filter((item, i) => s.config.kind === "exam" || item.graded != null || i < passed);
+export const shown = (s: Pick<Session, "config" | "items" | "index" | "reached" | "unseen">) => {
+  // Practice can be finished from a question gone back to: what lies before the furthest question reached, or the last answer, was passed all the same.
+  const passed = Math.max(s.index, s.reached ?? 0, s.items.findLastIndex((item) => item.graded));
+  return s.items.filter((item, i) => s.config.kind === "exam" || item.graded != null || (i < passed && !s.unseen?.includes(i)));
 };
 
 /**
@@ -33,8 +34,46 @@ export const shiftFrom = <T>(byIndex: Record<number, T>, at: number): Record<num
  * Ids of the questions the result's "Retry mistakes" asks again and its "Mistakes" line counts: the first showings that were not answered right.
  * An exam also counts a question left without an answer, as its score does; practice leaves out what was only skipped (see `shown`).
  */
-export const mistakeIds = (s: Pick<Session, "config" | "items" | "index">): number[] =>
+export const mistakeIds = (s: Pick<Session, "config" | "items" | "index" | "reached" | "unseen">): number[] =>
   shown(s).filter((i) => !i.again && (s.config.kind === "exam" ? !i.graded?.correct : i.graded != null && !i.graded.correct)).map((i) => i.question);
+
+/** Another question of the same sitting is on screen: a new sitting starts at the top on its own (see `begin` on the result screen). */
+export const questionChanged = (before: Pick<Session, "id" | "index">, after: Pick<Session, "id" | "index">): boolean =>
+  before.id === after.id && before.index !== after.index;
+
+/**
+ * The learner lands on another question at its top, not where the last one's explanation ended. `window.scrollTo`, never
+ * `scrollIntoView`, which on Android WebView moves the visual viewport and puts the header under the status bar. Focus goes to
+ * the question so it is read out, unless its answer field already took it; `preventScroll` keeps the page where it was put.
+ */
+export function landOnQuestion(view: { scrollTo(x: number, y: number): void }, prompt: { focus(options?: FocusOptions): void } | null, typing: boolean): void {
+  view.scrollTo(0, 0);
+  if (!typing) prompt?.focus({ preventScroll: true });
+}
+
+/**
+ * The key of the question heading: each question shown gets a heading of its own. Answering one choice question after another
+ * with the keys leaves focus on the heading, and focusing the node that already has it is not announced again.
+ */
+export const questionKey = (s: Pick<Session, "id" | "index">): string => `${s.id}:${s.index}`;
+
+type Box = { left: number; width: number };
+/**
+ * How far to scroll the row of question numbers so the open one sits in its middle. The row is scrolled by itself
+ * (`scrollTo({ left })`), not with `scrollIntoView`, which on Android WebView also moves the page's visual viewport.
+ */
+export const centeredLeft = (row: Box & { scrollLeft: number }, cell: Box): number =>
+  Math.max(0, Math.round(row.scrollLeft + cell.left - row.left - (row.width - cell.width) / 2));
+
+/** The page background of each palette (`--bg` in styles.css), the colour index.html gives the browser's own bar. */
+export const THEME_COLORS = { light: "#f3f6fc", dark: "#111127" } as const;
+
+/**
+ * The colours of the `theme-color` tags, one per tag in the order given by their `media`. A theme picked in settings paints both,
+ * so the bar follows the app rather than the system; the system theme gives each tag back the colour of the scheme it is for.
+ */
+export const themeColors = (theme: "system" | "light" | "dark", medias: string[]): string[] =>
+  medias.map((media) => THEME_COLORS[theme !== "system" ? theme : media.includes("dark") ? "dark" : "light"]);
 
 /** The app's own keys in local storage. On a shared origin (a github.io site) any other key belongs to someone else. */
 export const KEYS = { settings: "settings", place: "place", device: "device", exam: "exam", updateCheck: "updateCheck", updateSkip: "updateSkip", setup: "setup", backup: "backup", unwritten: "unwritten" } as const;
@@ -373,6 +412,8 @@ const MODES = ["choice", "typed", "self_check"];
 function isOpenExam(x: unknown): x is Session {
   if (!isObject(x) || typeof x.id !== "string" || typeof x.bank !== "string" || x.finishedAt != null) return false;
   if (!isNumber(x.startedAt) || !isNumber(x.shownAt) || !Number.isSafeInteger(x.index)) return false;
+  // Navigation reads these back (`goTo` filters `unseen`): a damaged copy must be refused here, not throw on the first move.
+  if ((x.reached != null && !Number.isSafeInteger(x.reached)) || (x.unseen != null && !(Array.isArray(x.unseen) && x.unseen.every(Number.isSafeInteger)))) return false;
   const config = x.config;
   if (!isObject(config) || config.kind !== "exam" || !MODES.includes(config.answerMode as string)) return false;
   if ((config.timeLimitSec != null && !isNumber(config.timeLimitSec)) || (config.passPercent != null && !isNumber(config.passPercent))) return false;

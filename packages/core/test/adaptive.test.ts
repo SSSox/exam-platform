@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { Question } from "@exam/schema";
 import {
-  BOX_WAIT, DAY, HOUR, LEARNED_BOX, bankStats, createSession, finish, isDue, learn, pickAdaptive, project, shuffled, statusOf, strength, submit, summarize, weight,
+  BOX_WAIT, DAY, HOUR, LEARNED_BOX, bankStats, createSession, finish, goTo, isDue, learn, pickAdaptive, project, shuffled, statusOf, strength, submit, summarize, weight,
   type Memory, type ProgressEvent, type Response, type Session, type SessionConfig,
 } from "../src/index.ts";
 
@@ -249,6 +249,18 @@ describe("a missed question comes back inside the sitting", () => {
     s = answer({ ...s, index: 1 }, false); // back to 2, missed
     expect(s.items.map((i) => i.question)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 2, 10]);
     expect(s.items[5]).toBe(sixth);
+  });
+
+  test("the furthest question reached keeps its mark when a repeat is put back before it", () => {
+    let s = createSession("b", bank.slice(0, 10), config, T0, "s");
+    for (const k of [1, 2, 3, 4, 5, 6, 1]) s = goTo(s, k, T0);
+    expect(s.reached).toBe(6);
+    s = answer(s, false); // back on 2 and missed: the repeat goes in before 7
+    expect(s.items.map((i) => i.question)).toEqual([1, 2, 3, 4, 5, 2, 6, 7, 8, 9, 10]);
+    expect(s.items[s.reached!]!.question).toBe(7);
+    expect(s.unseen).toEqual([5]); // the repeat sits where the learner already went past
+    s = goTo(s, 5, T0);
+    expect(s.unseen).toEqual([]);
   });
 
   test("a question is put back at most a few times in one sitting", () => {

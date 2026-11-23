@@ -33,7 +33,13 @@ describe("a saved exam", () => {
       { ...saved(), session: exam({ items: [{ question: "1", mode: "choice" }] as unknown as SessionItem[] }) },
       { ...saved(), session: exam({ items: [{ question: 1, mode: "voice" }] as unknown as SessionItem[] }) },
       { ...saved(), session: exam({ startedAt: Infinity }) },
+      { ...saved(), session: exam({ unseen: "1" as unknown as number[] }) }, { ...saved(), session: exam({ unseen: [0.5] }) },
+      { ...saved(), session: exam({ reached: "2" as unknown as number }) },
     ]) expect(parseSavedExam(JSON.stringify(bad))).toBeUndefined();
+  });
+  test("the furthest position and unopened repeats come back with the exam", () => {
+    const back = saved({ session: exam({ reached: 1, unseen: [1] }) });
+    expect(parseSavedExam(JSON.stringify(back))).toEqual(back);
   });
   test("the answers of an ended exam wait in it as log events; anything else in their place is turned away", () => {
     const pending = [{ id: "e1", type: "attempt" as const, at: T0, bank: "b1", question: 1, correct: true, mode: "choice" as const }];

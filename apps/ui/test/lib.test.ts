@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { examHistory, learn, type BankRef, type ContentIndex, type Entry, type NodeManifest, type NodeRef, type ProgressEvent, type QuestionState, type Session, type SessionItem } from "@exam/core";
-import { KEYS, STATIONS, addMissing, putEvents, shortDate, awaitsRepeat, bankProgress, changeTarget, homeOf, holdExam, showContent, isProgressEvent, lineOf, namesLine, pageAbove, pathNames, putBackAt, sharedKind, shiftFrom, shown, shortTitle, stationsOf, wipe } from "../src/lib.ts";
+import { createSession, examHistory, goTo, learn, submit, type BankRef, type ContentIndex, type Entry, type NodeManifest, type NodeRef, type ProgressEvent, type QuestionState, type Session, type SessionConfig, type SessionItem } from "@exam/core";
+import { Question } from "@exam/schema";
+import { KEYS, STATIONS, addMissing, putEvents, shortDate, awaitsRepeat, bankProgress, changeTarget, homeOf, holdExam, showContent, isProgressEvent, lineOf, namesLine, pageAbove, pathNames, putBackAt, questionChanged, questionKey, centeredLeft, landOnQuestion, sessionKey, sharedKind, shiftFrom, shown, shortTitle, stationsOf, themeColors, THEME_COLORS, wipe } from "../src/lib.ts";
 
 /** Names are joined with a dot that stays on the line of the name before it. */
 const dots = (...names: string[]) => names.join(" · ");
@@ -267,6 +268,101 @@ describe("what the result counts as shown", () => {
     // 1 right, 2 skipped, 3 right; the student went back to 1 and finished there
     const s = session("practice", [item(1, right), item(2), item(3, right), item(4)], 0);
     expect(ids(shown(s))).toEqual(["1", "2", "3"]);
+  });
+
+  test("practice finished from a question gone back to still counts the ones skipped up to the furthest one reached", () => {
+    // 1 right, 2, 3 and 4 skipped, back from 5 to 2 and finished there
+    let s = { ...session("practice", [item(1, right), item(2), item(3), item(4), item(5), item(6)], 0), id: "s", bank: "b", startedAt: 0, shownAt: 0 } as Session;
+    for (const k of [1, 2, 3, 4, 1]) s = goTo(s, k, 0);
+    expect(ids(shown(s))).toEqual(["1", "2", "3", "4"]);
+  });
+
+  describe("with repeats after a miss", () => {
+    const question = (id: number) => Question.parse({ id, topic_id: 1, type: "single_choice", question: `Q${id}`, options: [{ id: "A", text: "a" }, { id: "B", text: "b" }], correct_answers: ["A"] });
+    const bank = Array.from({ length: 10 }, (_, k) => question(k + 1));
+    const config: SessionConfig = { kind: "practice", answerMode: "choice", unsupported: "self_check", shuffle: false, seed: 1, relearn: true };
+    const miss = (s: Session) => submit(s, bank.find((x) => x.id === s.items[s.index]!.question)!, { mode: "choice", selected: ["B"] }, 0, { scoring: "exact" });
+    const walk = (s: Session, to: number[]) => to.reduce((at, k) => goTo(at, k, 0), s);
+
+    test("a repeat opened and skipped counts like any other question skipped", () => {
+      // 1 missed, its repeat comes after 4; 2, 3, 4 and the repeat skipped, finished on 5
+      let s = miss(createSession("b", bank.slice(0, 8), config, 0, "s"));
+      expect(ids(s.items)).toEqual(["1", "2", "3", "4", "1'", "5", "6", "7", "8"]);
+      s = walk(s, [1, 2, 3, 4, 5]);
+      expect(ids(shown(s))).toEqual(["1", "2", "3", "4", "1'"]);
+    });
+
+    test("a repeat put back among the questions already moved past is not counted until the learner goes to it", () => {
+      // back from 7 to 2 and missed: the repeat goes in before 6, behind the furthest question reached
+      let s = miss(walk(createSession("b", bank, config, 0, "s"), [1, 2, 3, 4, 5, 6, 1]));
+      expect(ids(s.items)).toEqual(["1", "2", "3", "4", "5", "2'", "6", "7", "8", "9", "10"]);
+      expect(ids(shown(s))).toEqual(["1", "2", "3", "4", "5", "6"]);
+      s = walk(s, [2, 3, 4, 5, 6]);
+      expect(ids(shown(s))).toEqual(["1", "2", "3", "4", "5", "2'", "6"]);
+    });
+  });
+});
+
+describe("landing on another question", () => {
+  const spy = () => {
+    const calls: string[] = [];
+    return { calls, view: { scrollTo: (x: number, y: number) => calls.push(`scroll ${x},${y}`) }, prompt: { focus: (o?: FocusOptions) => calls.push(`focus ${o?.preventScroll}`) } };
+  };
+
+  test("only a move within the same sitting counts, not a new sitting or the same question drawn again", () => {
+    expect(questionChanged({ id: "s", index: 0 }, { id: "s", index: 1 })).toBe(true);
+    expect(questionChanged({ id: "s", index: 3 }, { id: "s", index: 1 })).toBe(true);
+    expect(questionChanged({ id: "s", index: 1 }, { id: "s", index: 1 })).toBe(false);
+    expect(questionChanged({ id: "s", index: 4 }, { id: "t", index: 0 })).toBe(false);
+  });
+
+  test("the page goes to the top and the question takes focus without scrolling", () => {
+    const { calls, view, prompt } = spy();
+    landOnQuestion(view, prompt, false);
+    expect(calls).toEqual(["scroll 0,0", "focus true"]);
+  });
+
+  test("a typed question keeps the focus its field took", () => {
+    const { calls, view, prompt } = spy();
+    landOnQuestion(view, prompt, true);
+    expect(calls).toEqual(["scroll 0,0"]);
+  });
+
+  test("choice questions answered one after another with the keys each get a heading of their own to focus", () => {
+    // Digit 1 then Enter on each exam question: the answer moves straight on, and the heading that had focus must not be reused
+    const question = (id: number) => Question.parse({ id, topic_id: 1, type: "single_choice", question: `Q${id}`, options: [{ id: "A", text: "a" }, { id: "B", text: "b" }], correct_answers: ["A"] });
+    const bank = [1, 2, 3].map(question);
+    const config: SessionConfig = { kind: "exam", answerMode: "choice", unsupported: "self_check", shuffle: false, seed: 1 };
+    const heading = { tagName: "DIV" };
+    const press = (code: string) => sessionKey({ code, key: code === "Enter" ? "Enter" : code.slice(-1), ctrlKey: false, metaKey: false, altKey: false, target: heading, dialogOpen: false }, 2);
+    let s = createSession("b", bank, config, 0, "s");
+    const keys = [questionKey(s)];
+    for (let k = 0; k < 2; k++) {
+      expect(press("Digit1")).toEqual({ pick: 0 });
+      expect(press("Enter")).toBe("primary");
+      s = goTo(submit(s, bank[s.index]!, { mode: "choice", selected: ["A"] }, 0, { scoring: "exact" }), s.index + 1, 0);
+      keys.push(questionKey(s));
+    }
+    expect(new Set(keys).size).toBe(3);
+    expect(questionKey({ id: "t", index: 0 })).not.toBe(keys[0]);
+  });
+
+  test("the row of question numbers is scrolled by itself to put the open one in its middle", () => {
+    expect(centeredLeft({ left: 0, width: 375, scrollLeft: 100 }, { left: 300, width: 40 })).toBe(233);
+    expect(centeredLeft({ left: 16, width: 343, scrollLeft: 0 }, { left: 16, width: 40 })).toBe(0);
+  });
+});
+
+describe("the colour of the browser's bar", () => {
+  const medias = ["(prefers-color-scheme: light)", "(prefers-color-scheme: dark)"];
+
+  test("a theme picked in settings paints both tags, whatever the system scheme", () => {
+    expect(themeColors("dark", medias)).toEqual([THEME_COLORS.dark, THEME_COLORS.dark]);
+    expect(themeColors("light", medias)).toEqual([THEME_COLORS.light, THEME_COLORS.light]);
+  });
+
+  test("the system theme gives each tag back the colour of its own scheme, as index.html has it", () => {
+    expect(themeColors("system", medias)).toEqual(["#f3f6fc", "#111127"]);
   });
 });
 
